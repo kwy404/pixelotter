@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<script>(function(){try{var t=localStorage.getItem('voodoo:theme');if(t&&t.charAt(0)==='"')t=JSON.parse(t);var r=document.documentElement;if(t==='light'||t==='dark'){r.setAttribute('data-theme',t);r.style.colorScheme=t}else{r.removeAttribute('data-theme')}}catch(e){}})();</script>
+<title>pixelotter: a photo editor in your browser</title>
+<meta name="description" content="A layered photo editor that runs offline in your browser: adjustments, masks, background removal, stickers, text and live editing with friends, peer to peer. Nothing is uploaded.">
+<link rel="canonical" href="https://kwy404.github.io/pixelotter/">
+<meta name="author" content="Alexandre Kohler">
+<meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0c0d" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="pixelotter">
+<meta property="og:title" content="pixelotter: a photo editor in your browser">
+<meta property="og:description" content="Layers, masks, cutouts, stickers and live editing with friends. Runs offline, nothing is uploaded.">
+<meta property="og:url" content="https://kwy404.github.io/pixelotter/">
+<meta property="og:image" content="https://kwy404.github.io/pixelotter/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..650&amp;family=Inter:wght@400..650&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monsooncss@0.2.0/dist/monsoon.min.css">
+<link rel="stylesheet" href="site.css">
+<script src="https://cdn.jsdelivr.net/npm/voodoojs@1.0.0/dist/voodoo.full.min.js" data-manual defer></script>
+<script type="module" src="site.js"></script>
+</head>
+<body class="darkroom antialiased">
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="room" aria-hidden="true">
+  <div class="grid-lines"></div>
+  <div class="leak leak-a"></div>
+  <div class="leak leak-b"></div>
+  <div class="leak leak-c"></div>
+  <div class="grain"></div>
+</div>
+
+<header class="bar">
+  <a class="brand" href="./" aria-label="pixelotter home">
+    <img class="brand-mark" src="assets/art/mark.svg" width="34" height="34" alt="">
+    <span class="brand-name">pixelotter</span>
+  </a>
+  <nav class="bar-nav" aria-label="Sections">
+    <a href="#sheet">Features</a>
+    <a href="#send">Sending</a>
+    <a href="#limits">Limits</a>
+  </nav>
+  <div class="bar-end">
+    <button type="button" class="icon-btn theme-btn" v-theme-toggle.cycle aria-label="Switch theme" title="Theme: system, light or dark">
+      <svg class="ic ti-system" aria-hidden="true"><use href="assets/icons.svg#i-aperture"/></svg>
+      <svg class="ic ti-light" aria-hidden="true"><use href="assets/icons.svg#i-sparkle"/></svg>
+      <svg class="ic ti-dark" aria-hidden="true"><use href="assets/icons.svg#i-proof"/></svg>
+    </button>
+    <a class="btn btn-primary btn-sm open-btn" href="app/">Open the editor</a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" data-hero>
+    <div class="hero-copy">
+      <p class="eyebrow">Frame 01 <span>/</span> the darkroom</p>
+      <h1>Develop your photos <em>in the browser.</em></h1>
+      <p class="lede">A layered photo editor that works offline on your own device. Cut out a subject, make a sticker, edit with friends. Nothing is uploaded.</p>
+      <div class="cta">
+        <a class="btn btn-primary btn-lg" href="app/">Open the editor</a>
+        <a class="btn btn-ghost btn-lg" href="app/#quick">Make a sticker</a>
+      </div>
+      <p class="meta">Free and open source. No account. Works in current desktop and phone browsers.</p>
+    </div>
+
+    <div class="tray" data-tray>
+      <div class="liquid"></div>
+      <div class="ripples"><i></i><i></i><i></i></div>
+      <figure class="print floater develop" style="--d:.22;--x:-6%;--y:6%;--r:-9deg;--w:30%;--delay:0s"><img src="assets/prints/seascape.jpg" width="600" height="450" alt="A print of a quiet seascape at dusk, developing"></figure>
+      <figure class="print floater develop" style="--d:.5;--x:70%;--y:-4%;--r:7deg;--w:24%;--delay:2.4s"><img src="assets/prints/portrait.jpg" width="480" height="480" alt="A print of Otto the otter in his beret, developing"></figure>
+      <figure class="print floater develop" style="--d:.34;--x:-2%;--y:64%;--r:-5deg;--w:26%;--delay:4.8s"><img src="assets/prints/teapot.jpg" width="600" height="450" alt="A print of a teapot on a window sill, developing"></figure>
+
+      <figure class="print keeper" data-depth=".12">
+        <div class="ba" v-data="{ pos: 40, dragging: false }" v-init="sweep($data)" :style="{ '--pos': pos + '%' }" @pointerdown="dragging = true; pos = at($event, $el)" @pointermove="dragging && (pos = at($event, $el))" @pointerup="dragging = false" @pointercancel="dragging = false" @pointerleave="dragging = false">
+          <img class="ba-before" src="assets/sample/before.jpg" width="1200" height="900" alt="Before: an illustrated sample photo of a felt otter figurine on a darkroom table" draggable="false">
+          <div class="ba-after"><img src="assets/sample/after.png" width="1200" height="900" alt="After: the same figurine cut out by the in-browser model, on a plain backdrop" draggable="false"></div>
+          <div class="ba-line"><span class="ba-knob" role="slider" tabindex="0" aria-label="Compare before and after background removal" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(pos)" aria-valuenow="40" @keydown.left.prevent="pos = Math.max(0, pos - 4)" @keydown.right.prevent="pos = Math.min(100, pos + 4)" @keydown.home.prevent="pos = 0" @keydown.end.prevent="pos = 100"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-flip"/></svg></span></div>
+          <span class="ba-tag ba-tag-l">Before</span>
+          <span class="ba-tag ba-tag-r">After</span>
+        </div>
+        <figcaption><span class="mono">14A</span> Real output of the in-browser cutout model on an illustrated sample.</figcaption>
+      </figure>
+
+      <img class="otto" data-depth=".3" src="assets/art/otto-dark.svg" width="520" height="660" alt="Otto the otter painter raises his brush, painting light onto the print">
+    </div>
+    <p class="scroll-hint" aria-hidden="true"><span></span>Scroll</p>
+  </section>
+
+  <section class="sheet" id="sheet" aria-labelledby="sheet-title">
+    <div class="sec-head">
+      <p class="eyebrow">Contact sheet <span>/</span> 6 frames</p>
+      <h2 id="sheet-title">Everything a darkroom had. Plus layers.</h2>
+    </div>
+    <ol class="strip">
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-layers"/></svg><h3>Layers and masks</h3><p>Groups, blend modes, opacity, layer masks and adjustment layers.</p><span class="num">12A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-adjust"/></svg><h3>Tone and looks</h3><p>Levels, curves, color, sharpen and blur, one tap looks and auto enhance.</p><span class="num">13A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-cutout"/></svg><h3>Remove background</h3><p>An open license model runs on your device, with a refine brush and feathered edges.</p><span class="num">14A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-sticker"/></svg><h3>Sticker maker</h3><p>Outline, caption and a 512 px WebP under 100 kB, ready for your messenger.</p><span class="num">15A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-text-path"/></svg><h3>Text that sits right</h3><p>Font presets, outline, shadow, curved text and speech bubbles.</p><span class="num">16A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-collaborate"/></svg><h3>Edit together</h3><p>Up to five friends on one document, each with a cursor and a layer of their own.</p><span class="num">17A</span></li>
+    </ol>
+  </section>
+
+  <section class="send" id="send" aria-labelledby="send-title">
+    <div class="sec-head">
+      <p class="eyebrow">Frame 18A <span>/</span> passing a print</p>
+      <h2 id="send-title">Send it to a friend, in full quality.</h2>
+      <p class="sub">Straight from your browser to theirs. No upload, no account, no recompression.</p>
+    </div>
+    <ol class="steps">
+      <li><span class="step-n">1</span><h3>Six words and a QR code</h3><p>Read the words out or let a phone camera scan the code.</p>
+        <div class="words" aria-label="Example words"><span>amber</span><span>otter</span><span>paper</span><span>river</span><span>silver</span><span>velvet</span></div></li>
+      <li><span class="step-n">2</span><h3>Confirm with six more</h3><p>Both screens show the same confirmation words, so nobody can slip in between.</p></li>
+      <li><span class="step-n">3</span><h3>Untouched and verified</h3><p>The exact bytes arrive and are checked with SHA-256 before you can save them.</p><p class="hash mono">sha256 match</p></li>
+    </ol>
+    <picture class="send-art">
+      <source srcset="assets/art/passing.svg" media="(prefers-color-scheme: light)">
+      <img src="assets/art/passing-dark.svg" width="960" height="640" alt="Two devices pass a print: six word tiles and a QR code on one, the print arriving with a matching hash on the other" loading="lazy">
+    </picture>
+  </section>
+
+  <section class="limits" id="limits" aria-labelledby="limits-title">
+    <div class="sec-head">
+      <p class="eyebrow">Fine print</p>
+      <h2 id="limits-title">Honest limits.</h2>
+    </div>
+    <ul class="limit-list">
+      <li>The cutout model and its runtime download once, about 16 MB, then work offline.</li>
+      <li>Large photos can be slow on older phones. The editor previews at screen size and renders full size on export.</li>
+      <li>Some browsers cannot encode WebP from a canvas. The app tells you and offers PNG instead.</li>
+      <li>Peer to peer can fail on very strict networks. You can add your own TURN server in Settings.</li>
+      <li>Printing colors are an approximation: the CMYK mode simulates a generic coated press, not your print shop.</li>
+    </ul>
+    <p class="cta center"><a class="btn btn-primary btn-lg" href="app/">Open the editor</a></p>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="foot-grid">
+    <div>
+      <a class="brand" href="./"><img class="brand-mark" src="assets/art/mark.svg" width="28" height="28" alt=""><span class="brand-name">pixelotter</span></a>
+      <p class="foot-note">Made by Alexandre Kohler: <a href="https://github.com/kwy404" rel="me noopener">GitHub</a> and <a href="https://www.linkedin.com/in/alexandre-silva-173687256/" rel="me noopener">LinkedIn</a>.</p>
+      <p class="foot-note">Built with <a href="https://kwy404.github.io/monsoon/" rel="noopener">Monsoon</a>. Interactive parts built with <a href="https://kwy404.github.io/Voodoo.js/" rel="noopener">Voodoo.js</a>.</p>
+      <p class="foot-note">MIT license, 2026.</p>
+    </div>
+    <nav aria-label="More from kwy404">
+      <p class="foot-title">More from kwy404</p>
+      <ul class="more">
+        <li><a href="https://kwy404.github.io/monsoon/">Monsoon</a></li>
+        <li><a href="https://kwy404.github.io/Voodoo.js/">Voodoo.js</a></li>
+        <li><a href="https://kwy404.github.io/kastor/">kastor</a></li>
+        <li><a href="https://kwy404.github.io/fontsketch/">fontsketch</a></li>
+        <li><a href="https://kwy404.github.io/filefinch/">filefinch</a></li>
+        <li><a href="https://kwy404.github.io/howlden/">howlden</a></li>
+        <li><a href="https://kwy404.github.io/installkite/">installkite</a></li>
+        <li><a href="https://kwy404.github.io/a11ymedic/">a11ymedic</a></li>
+        <li><a href="https://kwy404.github.io/cookieowl/">cookieowl</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
