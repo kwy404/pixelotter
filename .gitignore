@@ -1,0 +1,6 @@
+node_modules/
+coverage/
+tmp/
+.e2e/
+*.log
+.DS_Store

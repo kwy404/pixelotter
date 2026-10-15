@@ -1,0 +1,50 @@
+{
+  "name": "pixelotter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A photo editor that runs entirely in your browser, offline, with layers, cutouts and live editing with friends.",
+  "keywords": [
+    "photo editor",
+    "image editor",
+    "layers",
+    "background removal",
+    "offline",
+    "peer to peer"
+  ],
+  "homepage": "https://kwy404.github.io/pixelotter/",
+  "bugs": {
+    "url": "https://github.com/kwy404/pixelotter/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwy404/pixelotter.git"
+  },
+  "license": "MIT",
+  "author": "Alexandre Kohler (https://github.com/kwy404)",
+  "type": "module",
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "build:app": "node scripts/build-app.mjs",
+    "check:app": "node scripts/build-app.mjs --check",
+    "build:art": "node scripts/art/build-art.mjs",
+    "lint": "eslint .",
+    "check:rules": "node scripts/check-rules.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node test/app-e2e.mjs",
+    "test:live": "node test/live-e2e.mjs",
+    "test:qa": "node test/site-qa.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@scure/bip39": "^2.4.0",
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
+    "jsqr": "^1.4.0",
+    "playwright-core": "^1.64.1",
+    "vitest": "^3.2.7"
+  }
+}
