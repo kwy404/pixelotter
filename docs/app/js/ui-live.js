@@ -1,8 +1,9 @@
-// The live session panel and dialogs: inviting with six words and a QR code (never a link on
-// screen), joining by typing or scanning, the confirmation words, people and roles, follow
-// mode, chat with replies, reactions and pasted images, and the call with video tiles.
+// The live session panel and dialogs: inviting with six words, a QR code and an invite link
+// with a Copy button (all three carry the same words), joining by typing, pasting or scanning,
+// safety words, people and roles, follow mode, chat with replies, reactions and pasted images,
+// and the call with mute, camera, screen sharing, device pickers and video tiles.
 
-import { resolvePhrase, splitPhrase, suggestWords, wordsFromLink } from '../lib/words.js';
+import { resolvePhrase, resolveWord, splitPhrase, suggestWords, wordsFromLink } from '../lib/words.js';
 import { Live } from './live.js';
 import { download } from './files.js';
 import { openFile } from './files.js';
@@ -16,16 +17,44 @@ export function installLive(ctx) {
   S.call = { inCall: false, muted: false, camera: false, screen: false, processing: null, speaking: [], tiles: [] };
 
   ui.liveDialog = async () => {
-    if (live.mode === 'off') await live.host();
-    else if (live.mode === 'host' && S.live.step !== 'code') await live.newInvite('live');
     ui.openDialog('dlg-live');
     ui.openPanel('live');
+    if (live.mode === 'off') await live.host();
+    else if (live.mode === 'host' && S.live.step !== 'code') await live.openRoom();
   };
   globals.inviteMore = async () => {
     ui.openDialog('dlg-live');
     if (live.mode === 'send') return live.newInvite('send');
-    await live.newInvite('live');
+    if (live.mode === 'host' && S.live.step !== 'code') await live.openRoom();
   };
+  // new words: the old words, QR code and link stop working for anyone who has not joined yet
+  globals.newRoomWords = () => live.openRoom({ fresh: true });
+  globals.copyInvite = async () => {
+    const link = S.live.qrLink;
+    if (!link) return;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(link);
+      ok = true;
+    } catch {
+      const el = document.getElementById('invite-link');
+      if (el) {
+        el.select();
+        ok = document.execCommand?.('copy') ?? false;
+      }
+    }
+    S.live = { ...S.live, copied: ok };
+    ctx.toast(ok ? t('live.copied') : t('live.copyFailed'), ok ? 'success' : 'warning');
+    setTimeout(() => (S.live = { ...S.live, copied: false }), 2000);
+  };
+  globals.shareInvite = async () => {
+    try {
+      await navigator.share({ title: 'pixelotter', text: t('live.shareText'), url: S.live.qrLink });
+    } catch {
+      // closed or not supported
+    }
+  };
+  globals.canShare = () => typeof navigator.share === 'function';
   ui.joinDialog = (words = null) => {
     if (live.mode !== 'off' && live.mode !== 'joining') live.leave();
     S.live = { ...S.live, mode: 'off', step: 'idle' };
@@ -39,26 +68,48 @@ export function installLive(ctx) {
     if (words?.length === 6) globals.joinWords();
   };
   const read = (prefix) => [0, 1, 2, 3, 4, 5].map((i) => document.getElementById(`${prefix}${i}`)?.value ?? '');
-  globals.pasteWords = (e, prefix) => {
-    const text = e.clipboardData?.getData('text') ?? '';
-    const parts = splitPhrase(text);
-    if (parts.length < 2) return;
-    e.preventDefault();
-    parts.slice(0, 6).forEach((p, i) => {
-      const el = document.getElementById(`${prefix}${i}`);
+  const box = (prefix, i) => document.getElementById(`${prefix}${i}`);
+  const submitFor = (prefix) => (prefix === 'join-word-' ? globals.joinWords : globals.confirmWords);
+
+  // Puts a pasted phrase, invite text or link into the boxes, one word per box, starting at the
+  // first box for a whole phrase. Phone keyboards insert clipboard text with an input event and
+  // no paste event, so both handlers come here. Returns false when the text holds one word.
+  const spread = (prefix, i, text) => {
+    let parts = wordsFromLink(text) || splitPhrase(text);
+    if (parts.length < 2) return false;
+    if (parts.length > 6) {
+      // a shared text with a label ("Join me: ...") still works: keep only the exact words
+      const known = parts.filter((p) => resolveWord(p)?.how === 'exact');
+      if (known.length >= 6) parts = known.slice(-6);
+    }
+    const start = parts.length >= 6 ? 0 : i;
+    box(prefix, i).value = '';
+    parts.slice(0, 6 - start).forEach((p, k) => {
+      const el = box(prefix, start + k);
       if (el) el.value = p;
     });
+    const empty = [0, 1, 2, 3, 4, 5].map((k) => box(prefix, k)).find((el) => el && !resolveWord(el.value));
+    (empty ?? box(prefix, 5))?.focus();
+    if (resolvePhrase(read(prefix)).ok) submitFor(prefix)();
+    return true;
   };
-  globals.wordTyped = (e, i) => {
-    // a finished word jumps to the next box
+  ctx.spreadWords = spread;
+  globals.pasteWords = (e, prefix) => {
+    const i = Number(e.target.id.slice(prefix.length)) || 0;
+    if (spread(prefix, i, e.clipboardData?.getData('text') ?? '')) e.preventDefault();
+  };
+  globals.wordTyped = (e, i, prefix = 'join-word-') => {
     const v = e.target.value;
+    // more than one word arrived at once (a paste from a phone keyboard, or autofill)
+    if (/[^A-Za-z\u00c0-\u024f]/.test(v.trim()) && spread(prefix, i, v)) return;
+    // a finished word jumps to the next box
     if (/\s$/.test(v)) {
       e.target.value = v.trim();
-      document.getElementById(`join-word-${i + 1}`)?.focus();
+      box(prefix, i + 1)?.focus();
       return;
     }
     const s = suggestWords(v, 2);
-    if (s.length === 1 && v.length >= 4 && s[0] === v.toLowerCase()) document.getElementById(`join-word-${i + 1}`)?.focus();
+    if (s.length === 1 && v.length >= 4 && s[0] === v.toLowerCase()) box(prefix, i + 1)?.focus();
   };
   globals.joinWords = async () => {
     const res = resolvePhrase(read('join-word-'));
@@ -76,12 +127,14 @@ export function installLive(ctx) {
   }, 400);
   void watch;
 
-  // links from a QR code: app/#w=word-word-...
+  // invite links and QR codes: app/#join=word-word-... The words never leave the browser (a
+  // hash is not sent to any server) and are cleared from the address bar right away.
   ctx.handleHash = () => {
     const words = wordsFromLink(location.hash);
-    if (words?.length === 6) {
+    if (words) {
       history.replaceState(null, '', location.pathname + location.search);
-      ui.joinDialog(words);
+      ui.joinDialog(words.length === 6 ? words : null);
+      if (words.length !== 6) ctx.spreadWords('join-word-', 0, words.join(' '));
       return true;
     }
     if (location.hash === '#quick') {
@@ -134,6 +187,13 @@ export function installLive(ctx) {
     scrollChat();
   };
   globals.react = (id, kind) => live.react(id, kind);
+  // a picture from the chat opens as a new document
+  ctx.openChatImage = async (id) => {
+    const m = live.chat.find((x) => x.id === id);
+    if (!m?.image) return;
+    const edoc = await openFile(new File([m.image], `${m.name || 'chat'} picture.jpg`, { type: m.imageType || 'image/jpeg' }));
+    app.add(edoc);
+  };
   globals.reactionIcon = (k) => ({ heart: 'heart', thumbs: 'thumbs', laugh: 'laugh', star: 'star', wow: 'wow' })[k] ?? 'star';
   const scrollChat = () => setTimeout(() => {
       const log = document.getElementById('chat-log');
@@ -141,9 +201,29 @@ export function installLive(ctx) {
     }, 30);
 
   // ---------- call ----------
+  const refreshDevices = async () => {
+    S.devices = await live.call.devices();
+  };
+  ctx.refreshDevices = refreshDevices;
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => refreshDevices());
   globals.toggleCall = async () => {
     if (S.call.inCall) live.leaveCall();
-    else await live.joinCall();
+    else {
+      await live.joinCall();
+      await refreshDevices(); // labels show once the microphone is allowed
+    }
+  };
+  globals.pickDevice = async (kind, id) => {
+    const c = live.call;
+    if (kind === 'mic') await c.setInput(id, live.mediaLinks());
+    else if (kind === 'camera') await c.setCamera(id, live.mediaLinks());
+    else if (kind === 'speaker') await c.setOutput(id);
+    else if (kind === 'noise') {
+      S.settings.call.noiseMode = id;
+      await c.setInput(undefined, live.mediaLinks());
+    }
+    // c.settings is S.settings.call itself, so the choice is already stored
+    ctx.saveLocal?.();
   };
   globals.toggleMute = () => live.call.toggleMute();
   globals.toggleCamera = () => live.call.toggleCamera(live.mediaLinks());
@@ -159,6 +239,8 @@ export function installLive(ctx) {
         el = document.createElement('figure');
         el.className = `tile ${tile.kind}-tile`;
         el.dataset.id = tile.id;
+        el.dataset.peer = tile.peer ?? '';
+        el.tabIndex = 0;
         const v = document.createElement('video');
         v.autoplay = true;
         v.playsInline = true;

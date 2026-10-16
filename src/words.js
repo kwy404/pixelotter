@@ -125,13 +125,16 @@ export function confirmWords(fingerprintA, fingerprintB, nonce) {
   return wordsFromBytes(digest);
 }
 
-/** The link a phone camera opens to join with the words, nothing to type: app/#w=word-word-... */
+/**
+ * The invite link: app/#join=word-word-word-word-word-word. The words live in the hash, so the
+ * browser never sends them to any server, not even to the page host.
+ */
 export function wordsLink(appUrl, words) {
-  return `${String(appUrl).split('#')[0]}#w=${words.map(normalizeWord).join('-')}`;
+  return `${String(appUrl).split('#')[0]}#join=${words.map(normalizeWord).join('-')}`;
 }
 
-/** The words in a pairing link, or null. */
+/** The words in an invite link (also the older #w= form), or null. */
 export function wordsFromLink(text) {
-  const m = /[#&?]w=([A-Za-z-]+)/.exec(String(text ?? ''));
-  return m ? m[1].split('-').filter(Boolean) : null;
+  const m = /[#&?](?:join|w)=([A-Za-z-]+)/.exec(String(text ?? ''));
+  return m ? m[1].split('-').filter(Boolean).map((w) => w.toLowerCase()) : null;
 }

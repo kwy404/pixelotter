@@ -3,8 +3,8 @@ import { createDoc, makeLayer } from '../src/doc.js';
 import { GuestSession, HostSession, MAX_GUESTS } from '../src/session.js';
 import { Assembler, MessagePort, decodeBody, encodeBody, encodeFrames, extractBinary, restoreBinary } from '../src/wire.js';
 import { fileMessage, fileReceipt, receiveFile } from '../src/transfer.js';
-import { CodeCreator, CodeJoiner } from '../src/pairing.js';
-import { confirmWords } from '../src/words.js';
+import { CodeCreator, CodeJoiner, RoomCreator } from '../src/pairing.js';
+import { confirmWords, wordsFromLink, wordsLink } from '../src/words.js';
 import { FakeBroker, MemoryEngine, portPair, randomData, tick, until } from './unit-helpers.js';
 
 describe('wire format', () => {
@@ -117,6 +117,48 @@ describe('six word pairing over relays', () => {
     await tick(1700);
     expect(lateOffer).toBe(false);
     for (const s of [creator, joiner, late]) s.stop();
+  });
+
+  it('a room invite lets several devices in with the same words, each with its own offer', async () => {
+    const broker = new FakeBroker();
+    const hub = (topic) => broker.hub(topic);
+    const made = [];
+    const room = new RoomCreator(async (id) => {
+      made.push(id);
+      return { sdp: `offer-for-${id}`, nonce: `n-${made.length}` };
+    }, { hub, iterations: 1000 });
+    const words = await room.start();
+    const answers = [];
+    room.on('answer', (m) => answers.push(m));
+    // the words reach the room the same way through the link and the QR code (which holds the link)
+    const viaLink = wordsFromLink(wordsLink('https://kwy404.github.io/pixelotter/app/', words));
+    expect(viaLink).toEqual(words);
+    const joiners = [new CodeJoiner({ hub, iterations: 1000 }), new CodeJoiner({ hub, iterations: 1000 })];
+    const offers = [];
+    for (const j of joiners) {
+      j.on('offer', (m) => {
+        offers.push(m);
+        j.sendAnswer({ sdp: `answer-from-${j.id}` });
+      });
+    }
+    await joiners[0].start(words);
+    await joiners[1].start(viaLink);
+    await until(() => answers.length === 2);
+    expect(new Set(offers.map((o) => o.sdp)).size).toBe(2);
+    expect(offers.every((o) => o.sdp === `offer-for-${o.to}`)).toBe(true);
+    expect(answers.map((a) => a.from).sort()).toEqual(joiners.map((j) => j.id).sort());
+    await tick(3200);
+    expect(answers).toHaveLength(2);
+    expect(made).toHaveLength(2);
+    // a full room stops handing out offers
+    room.full = () => true;
+    const late = new CodeJoiner({ hub, iterations: 1000 });
+    let lateOffer = false;
+    late.on('offer', () => (lateOffer = true));
+    await late.start(words);
+    await tick(1700);
+    expect(lateOffer).toBe(false);
+    for (const s of [room, ...joiners, late]) s.stop();
   });
 
   it('other words never meet', async () => {

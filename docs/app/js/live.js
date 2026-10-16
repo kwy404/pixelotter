@@ -1,7 +1,8 @@
 // Peer to peer, with no account and no server of ours:
-//   * pairing: six words (and a QR code a phone camera can open) carry an encrypted WebRTC
-//     handshake through public MQTT relays; six confirmation words made from both connection
-//     certificates prove nobody sits in the middle;
+//   * pairing: six words (also as a QR code and an invite link with the words in the hash)
+//     carry an encrypted WebRTC handshake through public MQTT relays; one set of words lets
+//     every friend into the room; six safety words made from both connection certificates
+//     show that nobody sits in the middle (sending a copy asks to type them);
 //   * live editing: up to five friends on one document (lib/session.js), with cursors, a
 //     follow mode, per layer locks and view only or edit roles;
 //   * talking: chat with replies, reactions and pasted images, voice with noise suppression,
@@ -9,7 +10,7 @@
 //   * sending a copy: one file, untouched, verified with SHA-256.
 
 import { Emitter } from '../lib/emitter.js';
-import { CodeCreator, CodeJoiner, CODE_LIFETIME_MS } from '../lib/pairing.js';
+import { CodeCreator, CodeJoiner, RoomCreator, CODE_LIFETIME_MS } from '../lib/pairing.js';
 import { RtcLink, buildIceServers, STUN_SERVERS } from '../lib/rtc.js';
 import { confirmWords, resolvePhrase, wordsLink } from '../lib/words.js';
 import { sdpFingerprint } from '../lib/fingerprint.js';
@@ -159,6 +160,73 @@ class Invite extends Emitter {
   }
 }
 
+/**
+ * The room invite of a live session: one set of six words, shown as words, as a QR code and as
+ * a link (#join=...), lets each friend in with a fresh connection for as long as the room is
+ * open. Every connection gets six safety words made from both certificates, shown on both
+ * screens, so anyone can check that nobody sits in the middle.
+ */
+class Room extends Emitter {
+  constructor({ name, iceServers, appUrl, full }) {
+    super();
+    this.name = name;
+    this.iceServers = iceServers;
+    this.appUrl = appUrl;
+    this.full = full;
+    this.pending = new Map(); // device id -> { link, nonce, peerName }
+  }
+
+  async start(words = null) {
+    const creator = new RoomCreator((id) => this.offerFor(id));
+    this.creator = creator;
+    creator.full = this.full;
+    creator.on('status', (s) => this.emit('relays', s));
+    creator.on('abandoned', (id) => this.drop(id));
+    creator.on('answer', async (msg) => {
+      const p = this.pending.get(msg.from);
+      if (!p || typeof msg.sdp !== 'string') return;
+      p.peerName = String(msg.name ?? '').slice(0, 40) || 'Friend';
+      try {
+        await p.link.complete(msg.sdp);
+      } catch (err) {
+        console.warn('a guest connection failed', err);
+        this.drop(msg.from);
+      }
+    });
+    this.words = await creator.start(words);
+    this.link = wordsLink(this.appUrl, this.words);
+    this.qr = qrSvg(encodeQr(this.link, { ecl: 'M' }), { margin: 3, dark: '#141416', light: '#f3f1ec', title: 'QR code with the invite link' });
+    return this.words;
+  }
+
+  async offerFor(id) {
+    const link = new RtcLink({ iceServers: this.iceServers });
+    const p = { link, nonce: randomId(12), peerName: 'Friend' };
+    this.pending.set(id, p);
+    link.onopen = () => {
+      if (this.pending.get(id) !== p) return;
+      this.pending.delete(id);
+      const safety = confirmWords(sdpFingerprint(link.pc.localDescription.sdp), sdpFingerprint(link.pc.remoteDescription.sdp), p.nonce);
+      this.emit('guest', { link, name: p.peerName, safety });
+    };
+    link.onfail = () => this.drop(id);
+    const sdp = await link.offer();
+    return { sdp, nonce: p.nonce, name: this.name, kind: 'live' };
+  }
+
+  drop(id) {
+    const p = this.pending.get(id);
+    this.pending.delete(id);
+    this.creator?.forget(id);
+    p?.link.close();
+  }
+
+  stop() {
+    this.creator?.stop();
+    for (const id of [...this.pending.keys()]) this.drop(id);
+  }
+}
+
 /** The joiner side: types or scans the words, shows confirmation words, waits for the OK. */
 class Join extends Emitter {
   constructor({ name, iceServers }) {
@@ -214,6 +282,7 @@ export class Live extends Emitter {
     this.S = app.S;
     this.mode = 'off';
     this.links = new Map(); // peer id -> RtcLink (host: guests, guest: 'host' and other guests)
+    this.safety = new Map(); // peer id -> the six safety words of the direct connection
     this.ports = new Map();
     this.peers = [];
     this.chat = [];
@@ -302,10 +371,37 @@ export class Live extends Emitter {
     hs.on('cursor', (c) => this.showCursor(c));
     this.set({ mode: 'host', step: 'idle', peers: hs.peerList(), me: 'host' });
     app.syncTabs();
-    await this.newInvite('live');
+    await this.openRoom();
   }
 
-  async addGuest(link, name) {
+  /** Opens (or reopens with new words, so the old link stops working) the room invite. */
+  async openRoom({ fresh = false } = {}) {
+    if (this.mode !== 'host') return;
+    const keep = fresh ? null : this.room?.words ?? null;
+    this.room?.stop();
+    const room = new Room({ name: this.name, iceServers: this.iceServers, appUrl: this.appUrl, full: () => (this.session?.guestCount ?? 0) >= MAX_GUESTS });
+    this.room = room;
+    this.set({ step: 'starting', error: null, words: [], qr: '', qrLink: '' });
+    room.on('relays', (s) => this.set({ relays: s.connected.length }));
+    room.on('guest', async ({ link, name, safety }) => {
+      if (this.room !== room) return link.close();
+      try {
+        link.send(JSON.stringify({ t: 'pair', ok: true }));
+      } catch {
+        return link.close();
+      }
+      await this.addGuest(link, name, safety);
+    });
+    try {
+      const words = await room.start(keep);
+      if (this.room !== room) return;
+      this.set({ step: 'code', words, qr: room.qr, qrLink: room.link, expires: 0 });
+    } catch (err) {
+      this.set({ step: 'failed', error: this.app.t('live.noRelay', { error: err.message }) });
+    }
+  }
+
+  async addGuest(link, name, safety = null) {
     const hs = this.session;
     if (hs.guestCount >= MAX_GUESTS) {
       link.close();
@@ -316,8 +412,13 @@ export class Live extends Emitter {
     const id = await hs.addGuest(port, { name, role: this.S.settings.defaultRole ?? 'edit' });
     this.links.set(id, link);
     this.ports.set(id, port);
+    if (safety) {
+      this.safety.set(id, safety);
+      this.syncPeers(hs.peerList());
+    }
     port.inbox = (msg) => this.hostReceive(id, msg);
     link.ontrack = (e) => this.call.remoteTrack(id, e);
+    link.onmedia = (m) => this.call.remoteMedia(id, m);
     link.onclose = () => this.dropGuest(id);
     // tell everyone about the new peer so guests set up media links between themselves
     this.call.attach(link);
@@ -327,6 +428,7 @@ export class Live extends Emitter {
   }
 
   dropGuest(id) {
+    this.safety.delete(id);
     this.session?.removeGuest(id);
     this.links.delete(id);
     this.ports.delete(id);
@@ -375,6 +477,7 @@ export class Live extends Emitter {
     j.on('error', (e) => this.set({ step: 'failed', error: String(e) }));
     j.on('paired', () => {
       this.joining = null;
+      if (j.shown) this.safety.set('host', j.shown);
       if (j.kind === 'send') this.receiveOverLink(j.link, j.peerName);
       else this.becomeGuest(j.link, j.peerName);
     });
@@ -396,6 +499,7 @@ export class Live extends Emitter {
     this.links.set('host', link);
     this.ports.set('host', port);
     link.ontrack = (e) => this.call.remoteTrack('host', e);
+    link.onmedia = (m) => this.call.remoteMedia('host', m);
     link.onclose = () => this.ended();
     port.inbox = (msg) => this.guestReceive(msg);
     edoc.session = {
@@ -461,6 +565,7 @@ export class Live extends Emitter {
 
   wireMediaLink(id, link) {
     link.ontrack = (e) => this.call.remoteTrack(id, e);
+    link.onmedia = (m) => this.call.remoteMedia(id, m);
     link.onopen = () => this.call.attach(link);
     link.onclose = () => this.call.dropPeer(id);
   }
@@ -480,7 +585,7 @@ export class Live extends Emitter {
 
   syncPeers(list) {
     this.peers = list;
-    this.set({ peers: list.map((p) => ({ ...p, me: p.id === this.myId })) });
+    this.set({ peers: list.map((p) => ({ ...p, me: p.id === this.myId, safety: (this.safety.get(p.id) ?? []).join(' ') })) });
     this.app.syncLayers();
   }
 
@@ -633,6 +738,9 @@ export class Live extends Emitter {
 
   cleanup() {
     this.invite?.stop();
+    this.room?.stop();
+    this.room = null;
+    this.safety.clear();
     this.joining?.stop();
     this.leaveCall();
     for (const l of this.links.values()) l.close();

@@ -3,8 +3,8 @@
 // MQTT brokers (several at once) and swap the WebRTC offer and answer, sealed with that key.
 //   creator: shows the words, waits for a "join", sends its offer to the first device that joins
 //   joiner:  knocks with "join" until the offer arrives, then sends its answer
-// The code expires after 10 minutes, works once, and both sides leave the brokers as soon as
-// the connection opens. The relay hub is injectable, so the tests run the whole exchange on an
+// A one to one code expires after 10 minutes, works once, and both sides leave the brokers as
+// soon as the connection opens. A room invite stays open for as long as the room does. The relay hub is injectable, so the tests run the whole exchange on an
 // in memory broker.
 
 import { Emitter } from './emitter.js';
@@ -116,6 +116,73 @@ export class CodeCreator extends Side {
       this.answered = true;
       this.emit('answer', msg);
     }
+  }
+}
+
+/**
+ * A room invite: the same six words (typed, scanned from the QR code or opened as a link) let
+ * several devices in, one after another, for as long as the room is open. Each device that
+ * knocks gets a fresh offer from makeOffer(deviceId); its answer is emitted once as
+ * 'answer' { from, ...fields }. A device that never answers is forgotten after a minute.
+ */
+export class RoomCreator extends Side {
+  constructor(makeOffer, { maxPending = 6, pendingMs = 60000, ...opts } = {}) {
+    super(opts);
+    this.makeOffer = makeOffer;
+    this.maxPending = maxPending;
+    this.pendingMs = pendingMs;
+    this.guests = new Map(); // device id -> { offer, answered }
+    this.full = () => false;
+  }
+
+  /** Opens the room on the relays. Pass words to reuse them, or get new ones back. */
+  async start(words = null) {
+    const list = words ?? generateWords();
+    await this.open(list);
+    return list;
+  }
+
+  get pending() {
+    let n = 0;
+    for (const g of this.guests.values()) if (!g.answered) n++;
+    return n;
+  }
+
+  async handle(msg) {
+    if (msg.k === 'join') {
+      let g = this.guests.get(msg.f);
+      if (!g) {
+        if (this.pending >= this.maxPending || this.full()) return;
+        g = { offer: Promise.resolve().then(() => this.makeOffer(msg.f)), answered: false };
+        g.offer.catch(() => this.guests.delete(msg.f));
+        this.guests.set(msg.f, g);
+        this.after(this.pendingMs, () => {
+          if (this.guests.get(msg.f) === g && !g.answered) {
+            this.guests.delete(msg.f);
+            this.emit('abandoned', msg.f);
+          }
+        });
+      }
+      if (g.answered) return;
+      let offer;
+      try {
+        offer = await g.offer;
+      } catch {
+        return;
+      }
+      // the joiner knocks every second and a half, so a lost offer is simply sent again
+      await this.publish({ k: 'offer', to: msg.f, ...offer });
+    } else if (msg.k === 'answer' && msg.to === this.id) {
+      const g = this.guests.get(msg.f);
+      if (!g || g.answered) return;
+      g.answered = true;
+      this.emit('answer', { ...msg, from: msg.f });
+    }
+  }
+
+  /** Lets a device knock again from scratch (its connection failed or it left). */
+  forget(deviceId) {
+    this.guests.delete(deviceId);
   }
 }
 

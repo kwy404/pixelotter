@@ -101,7 +101,8 @@ describe('pairing link', () => {
     const { encodeQr } = await import('../src/qr.js');
     const words = ['abandon', 'ability', 'able', 'about', 'above', 'absent'];
     const link = wordsLink('https://kwy404.github.io/pixelotter/app/#old', words);
-    expect(link).toBe('https://kwy404.github.io/pixelotter/app/#w=abandon-ability-able-about-above-absent');
+    expect(link).toBe('https://kwy404.github.io/pixelotter/app/#join=abandon-ability-able-about-above-absent');
+    expect(wordsFromLink('https://x.test/app/#w=Abandon-ability')).toEqual(['abandon', 'ability']);
     expect(wordsFromLink(link)).toEqual(words);
     expect(wordsFromLink('nothing here')).toBeNull();
     // The longest possible words still fit a small, easy to scan code.

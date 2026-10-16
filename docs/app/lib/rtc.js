@@ -290,8 +290,9 @@ export class RtcLink {
       }
       delete this.senders[slot];
     }
-    if (track) this.localMedia[slot] = stream.id;
-    else delete this.localMedia[slot];
+    // a replaced track keeps arriving in the stream the other side already knows
+    if (track && !sender) this.localMedia[slot] = stream.id;
+    else if (!track) delete this.localMedia[slot];
     this._ctl({ media: this.localMedia });
   }
 

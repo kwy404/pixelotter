@@ -222,6 +222,68 @@ export class CallManager extends Emitter {
     this.emit('change');
   }
 
+  /** The microphones, speakers and cameras this browser lists (labels appear after a permission). */
+  async devices() {
+    const out = { inputs: [], outputs: [], cameras: [] };
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const map = { audioinput: 'inputs', audiooutput: 'outputs', videoinput: 'cameras' };
+      for (const d of list) {
+        const key = map[d.kind];
+        if (key && d.deviceId) out[key].push({ id: d.deviceId, label: d.label || `${key.slice(0, -1)} ${out[key].length + 1}` });
+      }
+    } catch {
+      // no media devices API
+    }
+    return out;
+  }
+
+  /** Switches the microphone (or the noise mode) during a call without leaving it. */
+  async setInput(deviceId, links) {
+    if (deviceId !== undefined) this.settings.inputId = deviceId;
+    if (this.testPipe) await this.startMicTest();
+    if (!this.inCall) return;
+    const old = this.pipe;
+    try {
+      this.pipe = await this.openPipe();
+    } catch {
+      this.emit('error', 'mic-failed');
+      return;
+    }
+    this.unmeter('self');
+    this.meter('self', this.pipe.out);
+    this.applyMute();
+    const track = this.pipe.out.getAudioTracks()[0];
+    for (const l of links) l.setTrack('mic', track, this.pipe.out);
+    this.closePipe(old);
+    this.emit('change');
+  }
+
+  /** Switches the camera while it is on. */
+  async setCamera(deviceId, links) {
+    this.settings.cameraId = deviceId;
+    if (!this.camera) return;
+    let next;
+    try {
+      next = await navigator.mediaDevices.getUserMedia({ video: cameraConstraints({ cameraId: deviceId }) });
+    } catch {
+      this.emit('error', 'camera-failed');
+      return;
+    }
+    const old = this.camera;
+    this.camera = next;
+    for (const l of links) l.setTrack('camera', next.getVideoTracks()[0], next);
+    stop(old);
+    this.emit('change');
+  }
+
+  /** Plays everyone through another speaker, where the browser allows choosing one. */
+  async setOutput(deviceId) {
+    this.settings.outputId = deviceId;
+    for (const r of this.remote.values()) if (r.audioEl?.setSinkId) await r.audioEl.setSinkId(deviceId).catch(() => {});
+    if (this.testPipe?.el?.setSinkId) await this.testPipe.el.setSinkId(deviceId).catch(() => {});
+  }
+
   /** A remote track arrived on a link from a peer. */
   remoteTrack(peerId, { track, stream, slot }) {
     const r = this.remote.get(peerId) ?? { audio: null, camera: null, screen: null };
@@ -235,6 +297,7 @@ export class CallManager extends Emitter {
         r.audioEl = el;
       }
       el.srcObject = stream;
+      el.muted = this.isPeerMuted(peerId);
       if (this.settings.outputId && el.setSinkId) el.setSinkId(this.settings.outputId).catch(() => {});
       el.play().catch(() => {});
       this.meter(peerId, stream);
@@ -248,6 +311,34 @@ export class CallManager extends Emitter {
     }
     this.remote.set(peerId, r);
     this.emit('change');
+  }
+
+  /** Silences one person on this device only (they are not told). */
+  setPeerMuted(peerId, muted) {
+    this.mutedPeers ??= new Set();
+    if (muted) this.mutedPeers.add(peerId);
+    else this.mutedPeers.delete(peerId);
+    const el = this.remote.get(peerId)?.audioEl;
+    if (el) el.muted = muted;
+  }
+
+  isPeerMuted(peerId) {
+    return !!this.mutedPeers?.has(peerId);
+  }
+
+  /** The other side said which streams it sends now: forget a camera or screen it stopped. */
+  remoteMedia(peerId, media) {
+    const r = this.remote.get(peerId);
+    if (!r) return;
+    const live = new Set(Object.values(media ?? {}));
+    let changed = false;
+    for (const kind of ['camera', 'screen']) {
+      if (r[kind] && !live.has(r[kind].id)) {
+        r[kind] = null;
+        changed = true;
+      }
+    }
+    if (changed) this.emit('change');
   }
 
   dropPeer(peerId) {

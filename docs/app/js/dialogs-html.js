@@ -230,12 +230,17 @@ export const DIALOGS_HTML = `
         <ol class="word-tiles" id="code-words" :data-words="S.live.words.join(' ')"><li v-for="(w, i) in S.live.words" :key="i"><span>{ i + 1 }</span>{ w }</li></ol>
         <div class="qr-box" v-html="S.live.qr" id="code-qr" :aria-label="$t('live.qr')"></div>
       </div>
-      <p class="hint">{ $t('live.scanHint') }</p>
+      <div class="invite-link" v-show="S.live.qrLink">
+        <label class="label" for="invite-link">{ $t('live.linkLabel') }</label>
+        <div class="invite-row"><input id="invite-link" class="input input-sm mono" readonly :value="S.live.qrLink || ''" @focus="$event.target.select()"><button type="button" class="btn btn-sm btn-primary" @click="copyInvite()" data-action="copy-invite"><svg class="ic" aria-hidden="true"><use :href="S.live.copied ? 'icons.svg#i-check' : 'icons.svg#i-link'"/></svg>{ S.live.copied ? $t('live.copied') : $t('live.copy') }</button><button type="button" class="btn btn-sm btn-ghost" v-show="canShare()" @click="shareInvite()">{ $t('live.shareLink') }</button></div>
+      </div>
+      <p class="hint">{ S.live.mode === 'send' ? $t('send.scanHint') : $t('live.scanHint') }</p>
+      <p class="hint" v-show="S.live.mode === 'host'">{ $t('live.inRoom', { n: Math.max(0, (S.live.peers || []).length - 1) }) } <button type="button" class="btn btn-xs btn-ghost" @click="newRoomWords()" data-action="new-words">{ $t('live.newWords') }</button></p>
       <p class="hint">{ $t('live.relays', { n: S.live.relays || 0 }) } <span v-show="S.stun.checked">{ S.stun.ok ? $t('stun.ok') : $t('stun.blocked') }</span></p>
     </div>
     <div class="pair" v-show="S.live.step === 'confirm-type'">
       <p>{ $t('live.typeConfirm', { name: S.live.peerName || '' }) }</p>
-      <form class="word-inputs" @submit.prevent="confirmWords()" id="confirm-form"><input v-for="i in [0,1,2,3,4,5]" :key="i" class="input input-sm" :id="'confirm-word-' + i" autocomplete="off" autocapitalize="none" spellcheck="false" :aria-label="$t('live.word', { n: i + 1 })" @paste="pasteWords($event, 'confirm-word-')"><button class="btn btn-primary btn-sm" type="submit" id="confirm-btn">{ $t('live.confirm') }</button></form>
+      <form class="word-inputs" @submit.prevent="confirmWords()" id="confirm-form"><input v-for="i in [0,1,2,3,4,5]" :key="i" class="input input-sm" :id="'confirm-word-' + i" autocomplete="off" autocapitalize="none" spellcheck="false" :aria-label="$t('live.word', { n: i + 1 })" @paste="pasteWords($event, 'confirm-word-')" @input="wordTyped($event, i, 'confirm-word-')"><button class="btn btn-primary btn-sm" type="submit" id="confirm-btn">{ $t('live.confirm') }</button></form>
       <p class="error-text" v-show="S.live.confirmError" role="alert" id="confirm-error">{ S.live.confirmError }</p>
     </div>
     <div class="pair" v-show="S.live.step === 'live'"><p class="ok-line"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-check"/></svg>{ $t('live.connected') }</p><button type="button" class="btn btn-sm btn-soft" @click="inviteMore()">{ $t('live.inviteMore') }</button></div>
@@ -250,7 +255,7 @@ export const DIALOGS_HTML = `
     <div class="modal-header"><h2 id="dlg-join-title" class="modal-title">{ $t('join.title') }</h2></div>${close('dlg-join')}
     <div class="pair" v-show="!S.live.step || S.live.step === 'idle' || S.live.mode === 'off'">
       <p>{ $t('join.intro') }</p>
-      <form class="word-inputs" @submit.prevent="joinWords()"><input v-for="i in [0,1,2,3,4,5]" :key="i" class="input input-sm" :id="'join-word-' + i" autocomplete="off" autocapitalize="none" spellcheck="false" :aria-label="$t('live.word', { n: i + 1 })" @paste="pasteWords($event, 'join-word-')" @input="wordTyped($event, i)"><button class="btn btn-primary btn-sm" type="submit" id="join-btn">{ $t('join.button') }</button></form>
+      <form class="word-inputs" @submit.prevent="joinWords()"><input v-for="i in [0,1,2,3,4,5]" :key="i" class="input input-sm" :id="'join-word-' + i" autocomplete="off" autocapitalize="none" spellcheck="false" :aria-label="$t('live.word', { n: i + 1 })" @paste="pasteWords($event, 'join-word-')" @input="wordTyped($event, i, 'join-word-')"><button class="btn btn-primary btn-sm" type="submit" id="join-btn">{ $t('join.button') }</button></form>
       <p class="error-text" v-show="S.dlg.join.error" role="alert">{ S.dlg.join.error }</p>
     </div>
     <div class="pair" v-show="S.live.step === 'joining'"><span class="spinner spinner-ring spinner-sm"></span>{ $t('join.finding') }</div>
