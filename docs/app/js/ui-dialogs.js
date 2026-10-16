@@ -3,7 +3,7 @@
 // layer styles, fill, stroke, selection changes, color range, refine edge, content aware fill,
 // liquify, guides, settings, shortcuts, about, and the confirm and prompt helpers.
 
-import { createDoc, makeLayer, newId, findLayer } from '../lib/doc.js';
+import { createDoc, newId, findLayer } from '../lib/doc.js';
 import { FORMATS, WRITABLE } from '../lib/formats/index.js';
 import { getFilter, defaults as filterDefaults, normalizeParams, runFilter } from '../lib/filters/registry.js';
 import { curveTable } from '../lib/filters/tone.js';
@@ -836,6 +836,8 @@ export function installDialogs(ctx) {
   };
   globals.saveSettings = () => {
     ctx.saveLocal();
+    // a new microphone or noise mode applies to a running call right away
+    if (app.live?.call.inCall) app.live.call.setInput(undefined, app.live.mediaLinks());
     if (S.micTest) globals.micTest();
     ui.closeDialog('dlg-settings');
   };

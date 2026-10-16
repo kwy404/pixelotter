@@ -3,10 +3,12 @@
 // transparency, so an animated GIF opens as one full layer per frame with its delay. Writing
 // quantizes to a shared 256 color palette (median cut, dithered) and LZW compresses each frame.
 
-import { FormatError, Reader, Writer, image, startsWith } from './binary.js';
+import { FormatError, Reader, Writer, image } from './binary.js';
 import { mapToPalette, medianCut } from './quantize.js';
+import { isGif } from './magic.js';
 
-export const isGif = (b) => startsWith(b, [0x47, 0x49, 0x46, 0x38]);
+export { isGif };
+
 
 function lzwDecode(minCode, data, pixels) {
   const out = new Uint8Array(pixels);

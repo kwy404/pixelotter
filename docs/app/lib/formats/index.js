@@ -14,15 +14,24 @@
 //   platform.renderPdf(bytes) -> [{ width, height, data }]
 
 import { FormatError, startsWith } from './binary.js';
-import { decodePng, encodePng, isPng } from './png.js';
-import { decodeGif, encodeGif, isGif } from './gif.js';
-import { decodeBmp, decodeIco, encodeBmp, encodeIco, isBmp, isIco } from './bmp.js';
-import { decodePnm, decodeTga, encodeTga, isPnm, looksLikeTga } from './tga.js';
-import { decodeTiff, encodeTiff, isTiff } from './tiff.js';
-import { decodePsd, encodePsd, isPsd } from './psd.js';
-import { encodePdf, extractPdfImages, isPdf } from './pdf.js';
-import { decodeExr, decodeHdr, isExr, isHdr } from './hdr.js';
-import { findPreviews, isRaw } from './raw.js';
+import { isBmp, isExr, isGif, isHdr, isIco, isPdf, isPng, isPnm, isPsd, isRaw, isTiff, looksLikeTga } from './magic.js';
+
+// The codecs load on first use, so opening the editor does not pay for PSD, TIFF or PDF code.
+const lazy = (load) => {
+  let p = null;
+  return () => (p ??= load());
+};
+const codec = {
+  png: lazy(() => import('./png.js')),
+  gif: lazy(() => import('./gif.js')),
+  bmp: lazy(() => import('./bmp.js')),
+  tga: lazy(() => import('./tga.js')),
+  tiff: lazy(() => import('./tiff.js')),
+  psd: lazy(() => import('./psd.js')),
+  pdf: lazy(() => import('./pdf.js')),
+  hdr: lazy(() => import('./hdr.js')),
+  raw: lazy(() => import('./raw.js')),
+};
 
 export { FormatError };
 
@@ -101,29 +110,29 @@ export async function decode(input, { name = '', platform = null } = {}) {
   };
   switch (format) {
     case 'png': {
-      const img = await decodePng(bytes);
+      const img = await (await codec.png()).decodePng(bytes);
       return img.frames ? animated(img, img.frames) : flat(img);
     }
     case 'gif': {
-      const img = decodeGif(bytes);
+      const img = (await codec.gif()).decodeGif(bytes);
       return img.frames ? animated(img, img.frames) : flat(img);
     }
     case 'bmp':
-      return flat(decodeBmp(bytes));
+      return flat((await codec.bmp()).decodeBmp(bytes));
     case 'ico':
-      return flat(await decodeIco(bytes));
+      return flat(await (await codec.bmp()).decodeIco(bytes));
     case 'tga':
-      return flat(decodeTga(bytes));
+      return flat((await codec.tga()).decodeTga(bytes));
     case 'pnm':
-      return flat(decodePnm(bytes));
+      return flat((await codec.tga()).decodePnm(bytes));
     case 'hdr':
       notes.push('tone-mapped');
-      return flat(decodeHdr(bytes));
+      return flat((await codec.hdr()).decodeHdr(bytes));
     case 'exr':
       notes.push('tone-mapped');
-      return flat(await decodeExr(bytes));
+      return flat(await (await codec.hdr()).decodeExr(bytes));
     case 'tiff': {
-      const img = await decodeTiff(bytes);
+      const img = await (await codec.tiff()).decodeTiff(bytes);
       const pages = img.pages ?? [img];
       const W = Math.max(...pages.map((p) => p.width));
       const H = Math.max(...pages.map((p) => p.height));
@@ -132,7 +141,7 @@ export async function decode(input, { name = '', platform = null } = {}) {
     }
     case 'psd':
     case 'psb': {
-      const doc = await decodePsd(bytes);
+      const doc = await (await codec.psd()).decodePsd(bytes);
       const layers = doc.layers.length ? doc.layers : single(doc);
       if (doc.colorMode === 'cmyk') notes.push('cmyk-converted');
       return { format, width: doc.width, height: doc.height, colorMode: doc.colorMode, layers, composite: doc.data, notes };
@@ -140,7 +149,7 @@ export async function decode(input, { name = '', platform = null } = {}) {
     case 'pdf': {
       let pages;
       try {
-        pages = await extractPdfImages(bytes);
+        pages = await (await codec.pdf()).extractPdfImages(bytes);
       } catch (err) {
         if (err.code !== 'needs-renderer') throw err;
         pages = await needPlatform(platform, 'renderPdf', 'This PDF')(bytes);
@@ -152,7 +161,7 @@ export async function decode(input, { name = '', platform = null } = {}) {
       return { format, width: W, height: H, colorMode: pages[0].colorMode ?? 'rgb', layers, notes };
     }
     case 'raw': {
-      const previews = findPreviews(bytes);
+      const previews = (await codec.raw()).findPreviews(bytes);
       const decodeBitmap = needPlatform(platform, 'decodeBitmap', 'A camera raw preview');
       for (const p of previews) {
         try {
@@ -201,36 +210,36 @@ export async function encode(input, format, opts = {}, platform = null) {
   let bytes;
   switch (format) {
     case 'png':
-      bytes = await encodePng(img, { frames: opts.animated ? input.frames : null, dpi: opts.dpi });
+      bytes = await (await codec.png()).encodePng(img, { frames: opts.animated ? input.frames : null, dpi: opts.dpi });
       break;
     case 'gif':
-      bytes = encodeGif(img, { frames: opts.animated ? input.frames : null, dither: opts.dither !== false });
+      bytes = (await codec.gif()).encodeGif(img, { frames: opts.animated ? input.frames : null, dither: opts.dither !== false });
       break;
     case 'bmp':
-      bytes = encodeBmp(img);
+      bytes = (await codec.bmp()).encodeBmp(img);
       break;
     case 'tga':
-      bytes = encodeTga(img);
+      bytes = (await codec.tga()).encodeTga(img);
       break;
     case 'ico': {
       const sizes = (opts.sizes ?? [16, 32, 48, 256]).filter((s) => s <= 256);
       const scaled = [];
       for (const s of sizes) scaled.push(opts.resize ? await opts.resize(img, s, s) : img);
-      bytes = await encodeIco(scaled);
+      bytes = await (await codec.bmp()).encodeIco(scaled);
       break;
     }
     case 'tiff': {
       const pages = opts.pages && input.pages?.length ? input.pages : [opts.cmyk ? { width: img.width, height: img.height, cmyk: input.cmyk } : img];
-      bytes = await encodeTiff(pages, { compression: opts.compression ?? 'lzw', dpi: opts.dpi ?? 72, names: pages.map((p) => p.name) });
+      bytes = await (await codec.tiff()).encodeTiff(pages, { compression: opts.compression ?? 'lzw', dpi: opts.dpi ?? 72, names: pages.map((p) => p.name) });
       break;
     }
     case 'psd':
     case 'psb':
-      bytes = encodePsd({ width: img.width, height: img.height, composite: img.data, compositeCmyk: input.cmyk, layers: input.layers ?? single(img) }, { psb: format === 'psb', cmyk: !!opts.cmyk });
+      bytes = (await codec.psd()).encodePsd({ width: img.width, height: img.height, composite: img.data, compositeCmyk: input.cmyk, layers: input.layers ?? single(img) }, { psb: format === 'psb', cmyk: !!opts.cmyk });
       break;
     case 'pdf': {
       const pages = opts.pages && input.pages?.length ? input.pages : [opts.cmyk ? { width: img.width, height: img.height, cmyk: input.cmyk } : opts.jpeg ? { width: img.width, height: img.height, jpeg: opts.jpeg } : img];
-      bytes = await encodePdf(pages, { dpi: opts.dpi ?? 72, title: opts.title });
+      bytes = await (await codec.pdf()).encodePdf(pages, { dpi: opts.dpi ?? 72, title: opts.title });
       break;
     }
     default: {

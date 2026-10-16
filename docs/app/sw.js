@@ -3,7 +3,7 @@
 // The precache block below is rewritten by scripts/build-app.mjs.
 
 // precache:start
-const CACHE_VERSION = 'e0d275aaa942';
+const CACHE_VERSION = '911fc976eb4d';
 const PRECACHE = [
   './',
   'app.css',
@@ -18,6 +18,7 @@ const PRECACHE = [
   'index.html',
   'js/app.js',
   'js/commands.js',
+  'js/context-menu.js',
   'js/denoise-worklet.js',
   'js/dialogs-html.js',
   'js/engine/assets.js',
@@ -38,6 +39,7 @@ const PRECACHE = [
   'js/tools/paint.js',
   'js/tools/select.js',
   'js/tools/transform.js',
+  'js/ui-context.js',
   'js/ui-dialogs.js',
   'js/ui-extra.js',
   'js/ui-live.js',
@@ -70,6 +72,7 @@ const PRECACHE = [
   'lib/formats/gif.js',
   'lib/formats/hdr.js',
   'lib/formats/index.js',
+  'lib/formats/magic.js',
   'lib/formats/pdf.js',
   'lib/formats/png.js',
   'lib/formats/psd.js',

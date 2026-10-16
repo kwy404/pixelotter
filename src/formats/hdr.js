@@ -4,10 +4,11 @@
 // Reinhard curve around the scene's average luminance. EXR files with PIZ, PXR24, B44 or DWA
 // compression, tiled or deep EXR files are reported as unsupported instead of opening wrongly.
 
-import { FormatError, Reader, image, startsWith, zlibInflate } from './binary.js';
+import { FormatError, Reader, image, zlibInflate } from './binary.js';
+import { isHdr, isExr } from './magic.js';
 
-export const isHdr = (b) => startsWith(b, [0x23, 0x3f]); // "#?"
-export const isExr = (b) => startsWith(b, [0x76, 0x2f, 0x31, 0x01]);
+export { isHdr, isExr };
+
 
 /** Tone maps linear float RGB(A) to sRGB 8 bit with a Reinhard curve. */
 export function toneMap(width, height, rgb, alpha = null, { exposure = 1 } = {}) {

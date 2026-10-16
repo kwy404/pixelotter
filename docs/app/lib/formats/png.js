@@ -4,10 +4,11 @@
 // are composited with their dispose and blend rules. Writes 8 bit RGBA (or RGB when opaque) with
 // per row filter selection, and animated PNG from a list of frames.
 
-import { FormatError, Reader, Writer, ascii, crc32, crcDone, image, startsWith, zlibDeflate, zlibInflate } from './binary.js';
+import { FormatError, Reader, Writer, ascii, crc32, crcDone, image, zlibDeflate, zlibInflate } from './binary.js';
+import { PNG_SIGNATURE, isPng } from './magic.js';
 
-export const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-export const isPng = (b) => startsWith(b, PNG_SIGNATURE);
+export { PNG_SIGNATURE, isPng };
+
 
 function readChunks(bytes) {
   const r = new Reader(bytes);

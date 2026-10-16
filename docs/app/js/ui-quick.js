@@ -4,12 +4,12 @@
 
 import { makeLayer, newId, findLayer } from '../lib/doc.js';
 import { LOOK_NAMES, combineLook } from '../lib/filters/looks.js';
-import { applyAdjustments, autoEnhance, normalizeAdjustments } from '../lib/filters/adjust.js';
+import { applyAdjustments, normalizeAdjustments } from '../lib/filters/adjust.js';
 import { STICKER, captionSize, fitBudget, outlineMask, stickerLayout } from '../lib/sticker.js';
 import { maskBounds } from '../lib/mask.js';
 import { MODEL, coverage } from '../lib/segment.js';
 import { imageSizeOps, canvasSizeOps } from '../lib/geometry.js';
-import { makeCanvas, canvasToBlob } from './engine/assets.js';
+import { makeCanvas } from './engine/assets.js';
 import { TEXT_PRESETS, FONTS, ensureFont } from './engine/text.js';
 import { Segmenter, DOWNLOAD_MB } from './segmenter.js';
 import { openFile, download } from './files.js';

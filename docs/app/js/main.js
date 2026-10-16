@@ -9,10 +9,42 @@ const step = (text, p) => {
   if (fill) fill.style.width = `${Math.round(p * 100)}%`;
 };
 
+const help = (text) => {
+  const el = document.getElementById('loader-help');
+  if (!el) return;
+  el.hidden = !text;
+  el.textContent = text;
+};
+
+/** Waits for a script or stylesheet element to finish, with a time limit. Resolves true when it loaded. */
+function loaded(el, ready, ms) {
+  if (!el || ready()) return Promise.resolve(ready());
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(ready()), ms);
+    el.addEventListener('load', () => {
+      clearTimeout(t);
+      resolve(true);
+    }, { once: true });
+    el.addEventListener('error', () => {
+      clearTimeout(t);
+      resolve(false);
+    }, { once: true });
+  });
+}
+
+// a slow connection gets a word of explanation instead of a silent wait
+const slow = setTimeout(() => help('This is taking longer than usual. The first visit downloads the interface from a public CDN; after that the editor opens offline.'), 12000);
+
 async function boot() {
   step('Opening the darkroom', 0.08);
-  const V = window.V ?? (await new Promise((resolve) => window.addEventListener('load', () => resolve(window.V), { once: true })));
-  if (!V) throw new Error('The interface library did not load. Check the connection once; after that the editor works offline.');
+  step('Downloading the interface', 0.12);
+  const hasV = await loaded(document.getElementById('voodoo-js'), () => !!window.V, 60000);
+  const V = window.V;
+  if (!hasV || !V) throw new Error('The interface library did not load. Check the connection and try again; after the first visit the editor works offline.');
+  step('Opening the darkroom', 0.2);
+  // the component styles: the editor still works without them, so do not wait forever
+  const css = document.getElementById('monsoon-css');
+  const cssLoading = loaded(css, () => !!css?.sheet && css.media === 'all', 20000);
   const [{ App }, { Viewport }, { Commands }, { installShell }, { installDialogs, PRESETS }, { installQuick }, { installLive }, { installExtra }, { MESSAGES }, { DIALOGS_HTML }, { Autosaver, recoverable }, { packDocument }, { loadFonts }, { makeCanvas, canvasToBlob }, { APP_VERSION }] = await Promise.all([
     import('./app.js'),
     import('./view/viewport.js'),
@@ -30,6 +62,7 @@ async function boot() {
     import('./engine/assets.js'),
     import('./version.js'),
   ]);
+  const { installContext } = await import('./ui-context.js'); // preloaded with the rest
   step('Setting up the workspace', 0.45);
   document.getElementById('dialogs').innerHTML = DIALOGS_HTML;
 
@@ -51,7 +84,7 @@ async function boot() {
   const defaultDock = () => [
     { id: 'a', tabs: ['color', 'swatches'], active: 'color', open: true, collapsed: false },
     { id: 'b', tabs: ['properties', 'adjustments', 'info'], active: 'properties', open: true, collapsed: false },
-    { id: 'c', tabs: ['layers', 'paths'], active: 'layers', open: true, collapsed: false, grow: true },
+    { id: 'c', tabs: ['layers', 'channels', 'paths'], active: 'layers', open: true, collapsed: false, grow: true },
     { id: 'd', tabs: ['history', 'actions'], active: 'history', open: true, collapsed: false },
     { id: 'e', tabs: ['live'], active: 'live', open: false, collapsed: false },
   ];
@@ -160,10 +193,6 @@ async function boot() {
   });
 
   V.i18n({ locale: lang, fallback: 'en', messages: MESSAGES, persist: false, detect: false });
-  const t = (key, params) => {
-    const out = V.i18n.t(key, params);
-    return out === key ? '' : out;
-  };
   const tt = (key, params) => V.i18n.t(key, params);
 
   const globals = { S };
@@ -194,6 +223,7 @@ async function boot() {
   installQuick(ctx);
   installLive(ctx);
   installExtra(ctx);
+  installContext(ctx);
   S.adjustmentList = ['brightness-contrast', 'levels', 'curves', 'exposure', 'vibrance', 'hue-saturation', 'color-balance', 'black-white', 'photo-filter', 'channel-mixer', 'invert', 'posterize', 'threshold', 'gradient-map', 'selective-color', 'look', 'tone'];
 
   // keep the parts of the UI that depend on the active layer up to date
@@ -203,6 +233,13 @@ async function boot() {
     S.maskEdit = app.maskEdit;
     ctx.onActiveChanged?.();
     if (S.panelsOpen.timeline) ctx.syncFrames?.();
+    if (S.dock.some((g) => g.open && !g.collapsed && g.active === 'channels')) ctx.syncChannels?.();
+  };
+  // the channel thumbnails follow pixel edits while the panel shows
+  const scheduleThumbs = app.scheduleThumbs.bind(app);
+  app.scheduleThumbs = (delay) => {
+    scheduleThumbs(delay);
+    if (S.dock.some((g) => g.open && !g.collapsed && g.active === 'channels')) ctx.syncChannels?.();
   };
   const syncColor = app.syncColorInfo.bind(app);
   app.syncColorInfo = () => {
@@ -233,6 +270,9 @@ async function boot() {
   };
 
   Object.assign(V.config.globals, globals);
+  step('Styling the workspace', 0.55);
+  await cssLoading;
+  if (css) css.media = 'all';
   V.start();
   app.setTool('move');
   app.syncColorInfo();
@@ -241,18 +281,18 @@ async function boot() {
   window.pixelotter = { app, S, ctx, live: app.live, V };
 
   step('Loading fonts', 0.62);
-  await Promise.race([loadFonts(), new Promise((r) => setTimeout(r, 4000))]);
-  step('Checking the cutout model', 0.82);
-  const cached = await ctx.segmenter.isCached();
-  if (cached && S.settings.preloadModel) ctx.segmenter.ensure().catch(() => {});
+  await Promise.race([loadFonts(), new Promise((r) => setTimeout(r, 1500))]);
+  step('Almost there', 0.82);
+  // the cutout model loads only when it is used (or in the background when the setting asks)
+  ctx.segmenter.isCached().then((cached) => cached && S.settings.preloadModel && ctx.segmenter.ensure().catch(() => {}), () => {});
   step('Ready', 1);
 
-  await ctx.refreshRecent();
-  try {
-    S.recover = (await recoverable()).map((r) => ({ id: r.id, name: r.name }));
-  } catch {
-    S.recover = [];
-  }
+  // saved work in this browser: never let a stuck database hold the editor back
+  const within = (p, ms, fallback) => Promise.race([p.catch(() => fallback), new Promise((r) => setTimeout(() => r(fallback), ms))]);
+  await within(ctx.refreshRecent(), 5000, null);
+  S.recover = ((await within(recoverable(), 5000, [])) ?? []).map((r) => ({ id: r.id, name: r.name }));
+  clearTimeout(slow);
+  help('');
   S.ready = true;
   document.getElementById('loader')?.classList.add('done');
   setTimeout(() => document.getElementById('loader')?.remove(), 600);
@@ -267,12 +307,19 @@ async function boot() {
     }
   });
 
+  // the offline copy is made after the editor is up, when the browser is idle
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    const register = () => navigator.serviceWorker.register('sw.js').catch(() => {});
+    setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(register, { timeout: 10000 }) : register()), 4000);
   }
 }
 
 boot().catch((err) => {
+  clearTimeout(slow);
   console.error(err);
-  step(`Could not start: ${err.message}`, 1);
+  step('Could not start', 1);
+  help(err.message);
+  document.getElementById('loader')?.classList.add('failed');
+  const retry = document.getElementById('loader-retry');
+  if (retry) retry.hidden = false;
 });

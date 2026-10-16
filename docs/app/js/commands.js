@@ -4,7 +4,7 @@
 
 import { makeLayer, newId, findLayer, subtree, indexOf, isLocked } from '../lib/doc.js';
 import { patchOp } from '../lib/pixels.js';
-import { canvasSizeOps, cropOps, flipCanvasOps, imageSizeOps, rotateCanvasOps, layerMatrix, invert, apply, corners, boundsOf } from '../lib/geometry.js';
+import { cropOps, flipCanvasOps, rotateCanvasOps, layerMatrix, invert, apply, corners, boundsOf } from '../lib/geometry.js';
 import { FILTERS, FILTER_GROUPS, getFilter, runFilter, defaults as filterDefaults } from '../lib/filters/registry.js';
 import { autoEnhance } from '../lib/filters/adjust.js';
 import { maskBounds, invertMask } from '../lib/mask.js';
@@ -188,12 +188,12 @@ function define(C) {
   // ---------- Edit ----------
   add('edit.undo', (app) => app.edoc.undo(), { key: 'Mod+Z', enabled: (app) => app.edoc?.history.canUndo });
   add('edit.redo', (app) => app.edoc.redo(), { key: 'Mod+Shift+Z', enabled: (app) => app.edoc?.history.canRedo });
-  add('edit.cut', async (app) => {
+  add('edit.cut', async () => {
     await C.run('edit.copy');
     await C.run('edit.clear');
   }, { key: 'Mod+X', enabled: (app) => hasSel(app) && isRaster(app) });
-  add('edit.copy', (app) => ui.copy(false), { key: 'Mod+C', enabled: hasLayer });
-  add('edit.copyMerged', (app) => ui.copy(true), { key: 'Mod+Shift+C', enabled: hasDoc });
+  add('edit.copy', () => ui.copy(false), { key: 'Mod+C', enabled: hasLayer });
+  add('edit.copyMerged', () => ui.copy(true), { key: 'Mod+Shift+C', enabled: hasDoc });
   add('edit.paste', () => ui.paste(), { key: 'Mod+V' });
   add('edit.clear', (app) => {
     const l = active(app);
@@ -230,7 +230,7 @@ function define(C) {
   add('edit.shortcuts', () => ui.shortcutsDialog(), { key: 'Mod+/' });
 
   // ---------- Image ----------
-  for (const mode of ['rgb', 'gray', 'cmyk']) add(`image.mode.${mode}`, (app) => ui.setMode(mode), { enabled: (app) => hasDoc(app) && doc(app).mode !== mode });
+  for (const mode of ['rgb', 'gray', 'cmyk']) add(`image.mode.${mode}`, () => ui.setMode(mode), { enabled: (app) => hasDoc(app) && doc(app).mode !== mode });
   for (const id of ADJUSTMENT_IDS) add(`adjust.${id}`, () => ui.filterDialog(id, { destructive: true }), { enabled: (app) => isRaster(app) && editable(app) });
   add('image.autoTone', (app) => {
     const l = active(app);
@@ -463,10 +463,10 @@ function define(C) {
     const d = doc(app);
     app.edoc.commit(app.t('history.pathSelection'), [{ t: 'sel', data: polygonMask(flatPath({ ...p, closed: true }), d.width, d.height) }], { icon: 'pen' });
   }, { key: 'Mod+Enter', enabled: (app) => hasDoc(app) && doc(app).paths.length > 0 });
-  add('select.toMask', (app) => C.run('layer.addMask', 'selection'), { enabled: (app) => hasSel(app) && hasLayer(app) && !active(app).mask });
+  add('select.toMask', () => C.run('layer.addMask', 'selection'), { enabled: (app) => hasSel(app) && hasLayer(app) && !active(app).mask });
 
   // ---------- Filter ----------
-  add('filter.last', (app) => C.lastFilter && ui.filterDialog(C.lastFilter.id, { params: C.lastFilter.params, instant: true }), { key: 'Mod+Alt+F', enabled: (app) => isRaster(app) && !!C.lastFilter });
+  add('filter.last', () => C.lastFilter && ui.filterDialog(C.lastFilter.id, { params: C.lastFilter.params, instant: true }), { key: 'Mod+Alt+F', enabled: (app) => isRaster(app) && !!C.lastFilter });
   for (const f of FILTERS.filter((x) => FILTER_GROUPS.includes(x.group))) add(`filter.${f.id}`, () => ui.filterDialog(f.id), { enabled: (app) => isRaster(app) && editable(app) });
   add('filter.liquify', () => ui.liquifyDialog(), { key: 'Mod+Shift+X', enabled: (app) => isRaster(app) && editable(app) });
 
@@ -494,7 +494,7 @@ function define(C) {
   add('view.fullscreen', () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()), { key: 'F' });
 
   // ---------- Window ----------
-  for (const p of ['layers', 'properties', 'adjustments', 'history', 'color', 'swatches', 'paths', 'actions', 'timeline', 'live', 'info']) add(`window.${p}`, () => ui.togglePanel(p), { key: { layers: 'F7', color: 'F6', info: 'F8' }[p] ?? null });
+  for (const p of ['layers', 'channels', 'properties', 'adjustments', 'history', 'color', 'swatches', 'paths', 'actions', 'timeline', 'live', 'info']) add(`window.${p}`, () => ui.togglePanel(p), { key: { layers: 'F7', color: 'F6', info: 'F8' }[p] ?? null });
   add('window.pro', () => ui.setWorkspace('pro'));
   add('window.quick', () => ui.setWorkspace('quick'));
   add('window.reset', () => ui.resetPanels());
@@ -600,7 +600,7 @@ export const MENUS = [
   ['menu.select', ['select.all', 'select.none', 'select.reselect', 'select.inverse', '-', 'select.subject', 'select.colorRange', 'select.refine', '-', ['menu.select.modify', ['select.feather', 'select.expand', 'select.contract']], '-', 'select.fromLayer', 'select.fromPath', 'select.toMask']],
   ['menu.filter', ['filter.last', '-', ...FILTER_GROUPS.map((g) => [`filter.group.${g}`, FILTERS.filter((f) => f.group === g).map((f) => `filter.${f.id}`)]), '-', 'filter.liquify']],
   ['menu.view', ['view.zoomIn', 'view.zoomOut', 'view.fit', 'view.actual', '-', 'view.proof', 'view.gamut', '-', 'view.rulers', 'view.grid', 'view.guides', 'view.snap', 'view.newGuide', 'view.clearGuides', '-', 'view.fullscreen']],
-  ['menu.window', ['window.pro', 'window.quick', 'window.reset', '-', 'window.layers', 'window.properties', 'window.adjustments', 'window.history', 'window.color', 'window.swatches', 'window.paths', 'window.actions', 'window.timeline', 'window.info', 'window.live']],
+  ['menu.window', ['window.pro', 'window.quick', 'window.reset', '-', 'window.layers', 'window.channels', 'window.properties', 'window.adjustments', 'window.history', 'window.color', 'window.swatches', 'window.paths', 'window.actions', 'window.timeline', 'window.info', 'window.live']],
   ['menu.help', ['help.tour', 'help.shortcuts', '-', 'help.english', 'help.portuguese', '-', 'help.about']],
 ];
 

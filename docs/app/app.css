@@ -85,6 +85,11 @@ input[type='color']::-webkit-color-swatch { border: 0; border-radius: 2px; }
 .loader-bar { width: 220px; height: 3px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
 .loader-bar span { display: block; height: 100%; width: 4%; background: var(--primary); transition: width .3s ease; box-shadow: 0 0 12px var(--primary); }
 .loader-step { margin: 0; color: var(--muted-foreground); font: 12px/1.3 var(--mono); }
+.loader-help { max-width: min(420px, 86vw); margin: 4px 0 0; text-align: center; color: var(--muted-foreground); font: 13px/1.45 var(--sans); }
+.loader-retry { margin-top: 6px; padding: 7px 16px; border-radius: 6px; border: 1px solid var(--border); background: var(--primary); color: var(--primary-foreground); font: 600 13px/1 var(--sans); cursor: pointer; }
+.loader.failed .loader-otto { animation: none; }
+/* dark is the default; until the theme library arrives this decides alone */
+:root:not([data-theme='light']) { --mode: 1; }
 @keyframes otto-bob { 50% { transform: translateY(-5px) rotate(-1deg); } }
 
 /* ---------- Shell ---------- */
@@ -571,3 +576,57 @@ body[data-workspace='quick'] .optbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* invite link, safety words and the call's device pickers */
+.invite-link { display: grid; gap: 6px; margin-top: 14px; }
+.invite-row { display: flex; gap: 6px; min-width: 0; }
+.invite-row .input { flex: 1; min-width: 0; font-size: 12px; text-overflow: ellipsis; }
+.invite-row .btn { flex: none; gap: 6px; }
+.invite-row .ic { width: 15px; height: 15px; }
+.people li { flex-wrap: wrap; }
+.safety { flex-basis: 100%; font-size: 11px; color: var(--muted-foreground); }
+.safety summary { cursor: pointer; width: max-content; }
+.safety code { display: block; margin: 4px 0 2px; color: var(--foreground); letter-spacing: 0.02em; word-spacing: 0.25em; }
+.safety small { display: block; }
+.call-devices { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px 8px; margin: 8px 0; }
+.call-devices .field { display: grid; gap: 2px; min-width: 0; }
+.call-devices .label { font-size: 11px; color: var(--muted-foreground); }
+.call-devices .select { width: 100%; min-width: 0; }
+
+/* channels */
+.channel-list { list-style: none; margin: 0; padding: 0; }
+.channel-row { display: flex; align-items: center; gap: 4px; height: 42px; padding: 0 4px; border-bottom: 1px solid var(--hair); }
+.channel-row.active { background: var(--active-bg); }
+.channel-pick { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.channel-pick .thumb { width: 34px; height: 30px; display: grid; place-items: center; background: var(--well); border: 1px solid var(--hair); border-radius: 3px; overflow: hidden; }
+.channel-pick .thumb img { max-width: 100%; max-height: 100%; }
+
+/* context menu: one component for the canvas, layers, chat and people */
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 12px));
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 8px;
+  border: 1px solid #2f2f35;
+  background: #17171a;
+  color: #e6e2db;
+  box-shadow: 0 18px 50px rgb(0 0 0 / .55), 0 0 0 1px rgb(0 0 0 / .4);
+  font: 13px/1.2 var(--sans);
+  color-scheme: dark;
+  outline: none;
+}
+.ctx-item { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px 0 6px; border-radius: 5px; cursor: default; outline: none; user-select: none; }
+.ctx-item.is-focus { background: rgb(192 138 78 / .22); color: #fff; }
+.ctx-item[aria-disabled='true'] { color: #6f6a63; }
+.ctx-item[aria-disabled='true'].is-focus { background: rgb(255 255 255 / .05); }
+.ctx-item.danger { color: #e48a7e; }
+.ctx-item[aria-expanded='true'] { background: rgb(255 255 255 / .07); }
+.ctx-mark { color: #d6a56a; text-align: center; }
+.ctx-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-key { color: #8d877f; font-size: 12px; padding-left: 14px; }
+.ctx-sep { height: 1px; margin: 4px 6px; background: #2c2c31; }
+@media (pointer: coarse) { .ctx-item { min-height: 40px; font-size: 14px; } }
+#viewport:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }

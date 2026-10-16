@@ -6,10 +6,12 @@
 // or no compression, one page per layer when asked. The IFD reader is also used to find the
 // preview images inside camera raw files.
 
-import { FormatError, Reader, Writer, image, startsWith, zlibDeflate, zlibInflate } from './binary.js';
+import { FormatError, Reader, Writer, image, zlibDeflate, zlibInflate } from './binary.js';
 import { cmykToRgb } from '../color/cmyk.js';
+import { isTiff } from './magic.js';
 
-export const isTiff = (b) => startsWith(b, [0x49, 0x49, 0x2a, 0x00]) || startsWith(b, [0x4d, 0x4d, 0x00, 0x2a]);
+export { isTiff };
+
 
 const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4 };
 

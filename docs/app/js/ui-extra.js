@@ -8,9 +8,126 @@ import { patchOp } from '../lib/pixels.js';
 import { rgbToCmyk } from '../lib/color/cmyk.js';
 import { fromHex } from '../lib/color/convert.js';
 import { makeCanvas } from './engine/assets.js';
+import { press } from './engine/render.js';
 
 export function installExtra(ctx) {
   const { app, S, t, globals, ui } = ctx;
+
+  // ---------- channels ----------
+  // RGB documents show red, green and blue (each can be hidden or viewed alone on the canvas,
+  // through an SVG color matrix on the display); CMYK documents show the four simulated plates
+  // from the approximate press model; any channel loads as a selection.
+  const PLANES = { rgb: ['r', 'g', 'b'], gray: ['gray'], cmyk: ['c', 'm', 'y', 'k'] };
+  S.channels = { list: [], solo: null, hidden: [], mode: 'rgb' };
+  const ns = 'http://www.w3.org/2000/svg';
+  const fx = document.createElementNS(ns, 'svg');
+  fx.setAttribute('width', '0');
+  fx.setAttribute('height', '0');
+  fx.setAttribute('aria-hidden', 'true');
+  fx.style.position = 'absolute';
+  fx.innerHTML = '<filter id="po-channels" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0"/></filter>';
+  document.body.append(fx);
+  const applyChannelView = () => {
+    const display = document.querySelector('.vp-display');
+    if (!display) return;
+    const { solo, hidden, mode } = S.channels;
+    if (mode !== 'rgb' || (!solo && !hidden.length)) {
+      display.style.filter = '';
+      return;
+    }
+    const row = (c) => (c === 'r' ? '1 0 0 0 0' : c === 'g' ? '0 1 0 0 0' : '0 0 1 0 0');
+    const zero = '0 0 0 0 0';
+    const rows = solo ? [row(solo), row(solo), row(solo)] : ['r', 'g', 'b'].map((c) => (hidden.includes(c) ? zero : row(c)));
+    fx.querySelector('feColorMatrix').setAttribute('values', `${rows.join(' ')} 0 0 0 1 0`);
+    display.style.filter = 'url(#po-channels)';
+  };
+  /** The values of one channel (0 to 255, 255 = full ink or full light) for an RGBA buffer. */
+  const plane = (data, ch, mode) => {
+    const n = data.length / 4;
+    const out = new Uint8Array(n);
+    if (mode === 'cmyk') {
+      const onWhite = new Uint8ClampedArray(data);
+      for (let i = 0; i < onWhite.length; i += 4) {
+        const a = onWhite[i + 3] / 255;
+        for (let c = 0; c < 3; c++) onWhite[i + c] = onWhite[i + c] * a + 255 * (1 - a);
+      }
+      const ink = press().toCmyk(onWhite);
+      const k = 'cmyk'.indexOf(ch);
+      for (let i = 0; i < n; i++) out[i] = ink[i * 4 + k];
+      return out;
+    }
+    const k = ch === 'r' ? 0 : ch === 'g' ? 1 : ch === 'b' ? 2 : -1;
+    for (let i = 0; i < n; i++) out[i] = k >= 0 ? data[i * 4 + k] : Math.round(0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]);
+    return out;
+  };
+  let channelTimer = 0;
+  ctx.syncChannels = (now = false) => {
+    clearTimeout(channelTimer);
+    if (!now) {
+      channelTimer = setTimeout(() => ctx.syncChannels(true), 300);
+      return;
+    }
+    const edoc = app.edoc;
+    const mode = edoc?.doc.mode ?? 'rgb';
+    if (!edoc) {
+      S.channels = { ...S.channels, list: [] };
+      return;
+    }
+    const d = edoc.doc;
+    const k = Math.min(1, 84 / Math.max(d.width, d.height));
+    const c = edoc.renderer.render({ scale: k, proof: false });
+    const px = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height);
+    const dom = () => {
+      const el = document.createElement('canvas');
+      el.width = c.width;
+      el.height = c.height;
+      return el;
+    };
+    const thumb = (values, ink) => {
+      const t2 = dom();
+      const g = t2.getContext('2d');
+      const img = g.createImageData(c.width, c.height);
+      for (let i = 0; i < values.length; i++) {
+        const v = ink ? 255 - values[i] : values[i];
+        img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+        img.data[i * 4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      return t2.toDataURL();
+    };
+    const list = PLANES[mode].map((ch) => ({ id: ch, label: t(`channel.${ch}`), thumb: thumb(plane(px.data, ch, mode), mode === 'cmyk') }));
+    if (mode === 'rgb') {
+      const full = dom();
+      full.getContext('2d').putImageData(px, 0, 0);
+      list.unshift({ id: 'rgb', label: 'RGB', thumb: full.toDataURL() });
+    }
+    const keep = mode === S.channels.mode;
+    S.channels = { list, mode, solo: keep ? S.channels.solo : null, hidden: keep ? S.channels.hidden : [] };
+    applyChannelView();
+  };
+  globals.syncChannelsNow = () => setTimeout(() => ctx.syncChannels(true), 0);
+  globals.soloChannel = (ch) => {
+    S.channels = { ...S.channels, solo: ch === 'rgb' || S.channels.solo === ch ? null : ch, hidden: [] };
+    applyChannelView();
+  };
+  globals.toggleChannel = (ch) => {
+    if (ch === 'rgb') S.channels = { ...S.channels, hidden: [], solo: null };
+    else {
+      const h = S.channels.hidden.includes(ch) ? S.channels.hidden.filter((x) => x !== ch) : [...S.channels.hidden, ch];
+      S.channels = { ...S.channels, hidden: h.length === 3 ? [] : h, solo: null };
+    }
+    applyChannelView();
+  };
+  globals.channelVisible = (ch) => (ch === 'rgb' ? !S.channels.hidden.length && !S.channels.solo : S.channels.solo ? S.channels.solo === ch : !S.channels.hidden.includes(ch));
+  globals.channelSelection = (ch) => {
+    const edoc = app.edoc;
+    if (!edoc) return;
+    const mode = edoc.doc.mode;
+    const c = edoc.renderer.render({ scale: 1, proof: false });
+    const px = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data;
+    const m = plane(px, ch === 'rgb' ? 'gray' : ch, mode === 'cmyk' && ch !== 'rgb' ? 'cmyk' : 'rgb');
+    edoc.commit(t('history.channelSelection'), [{ t: 'sel', data: m }], { icon: 'marquee' });
+  };
 
   // ---------- timeline ----------
   const frameThumb = (show) => {

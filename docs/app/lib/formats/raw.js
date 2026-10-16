@@ -6,15 +6,10 @@
 
 import { Reader } from './binary.js';
 import { readIfds } from './tiff.js';
+import { RAW_EXTENSIONS, isRaw } from './magic.js';
 
-export const RAW_EXTENSIONS = ['cr2', 'cr3', 'crw', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'dng', 'orf', 'rw2', 'raf', 'pef', 'srw', 'raw', 'rwl', '3fr', 'erf', 'kdc', 'mrw', 'x3f'];
+export { RAW_EXTENSIONS, isRaw };
 
-export function isRaw(bytes, name = '') {
-  const ext = String(name).toLowerCase().split('.').pop();
-  if (RAW_EXTENSIONS.includes(ext)) return true;
-  const s = String.fromCharCode(...bytes.subarray(0, 16));
-  return s.startsWith('FUJIFILMCCD-RAW') || s.startsWith('IIRO') || s.startsWith('IIU\0') || (s.slice(4, 12) === 'ftypcrx ');
-}
 
 /** The end of a JPEG that starts at `start`, walking its segments; -1 if it is not valid. */
 export function jpegEnd(bytes, start) {

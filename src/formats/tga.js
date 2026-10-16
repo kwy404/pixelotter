@@ -1,15 +1,9 @@
 // TGA (read and write) and the Netpbm family (PBM, PGM, PPM and PAM, read only).
 
 import { FormatError, Reader, Writer, image } from './binary.js';
+import { isPnm, looksLikeTga } from './magic.js';
 
-/** TGA has no magic number; this checks that the header makes sense. */
-export function looksLikeTga(b) {
-  if (b.length < 18) return false;
-  const cmapType = b[1];
-  const type = b[2];
-  const depth = b[16];
-  return cmapType <= 1 && [1, 2, 3, 9, 10, 11].includes(type) && [8, 15, 16, 24, 32].includes(depth) && b[12] + b[13] * 256 > 0 && b[14] + b[15] * 256 > 0;
-}
+export { isPnm, looksLikeTga };
 
 export function decodeTga(bytes) {
   if (!looksLikeTga(bytes)) throw new FormatError('Not a TGA file');
@@ -117,7 +111,6 @@ export function encodeTga(img) {
 }
 
 /** Netpbm: P1 to P6 and P7 (PAM). */
-export const isPnm = (b) => b[0] === 0x50 && b[1] >= 0x31 && b[1] <= 0x37 && [0x0a, 0x0d, 0x20, 0x09].includes(b[2]);
 
 export function decodePnm(bytes) {
   if (!isPnm(bytes)) throw new FormatError('Not a PBM, PGM, PPM or PAM file');

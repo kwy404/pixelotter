@@ -4,20 +4,98 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="color-scheme" content="dark light">
-<script>(function(){try{var t=localStorage.getItem('voodoo:theme');if(t&&t.charAt(0)==='"')t=JSON.parse(t);var r=document.documentElement;if(t==='light'||t==='dark'){r.setAttribute('data-theme',t);r.style.colorScheme=t}else{r.removeAttribute('data-theme')}}catch(e){}})();</script>
+<script>(function(){var r=document.documentElement,t=null;try{t=localStorage.getItem('voodoo:theme');if(t&&t.charAt(0)==='"')t=JSON.parse(t);if(!t){t='dark';localStorage.setItem('voodoo:theme','"dark"')}}catch(e){t='dark'}if(t==='light'||t==='dark'){r.setAttribute('data-theme',t);r.style.colorScheme=t}else{r.removeAttribute('data-theme')}})();</script>
 <title>pixelotter editor</title>
 <meta name="description" content="A layered photo editor that runs in your browser and works offline: adjustments, masks, background removal, stickers, text, filters and live editing with friends.">
 <link rel="canonical" href="https://kwy404.github.io/pixelotter/app/">
-<meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#121214">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monsooncss@0.2.0/dist/monsoon.min.css">
+<!-- the libraries load without blocking the loading screen; js/main.js waits for them -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monsooncss@0.2.0/dist/monsoon.min.css" id="monsoon-css" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="app.css">
-<script src="https://cdn.jsdelivr.net/npm/voodoojs@1.0.0/dist/voodoo.full.min.js" data-manual defer></script>
+<script src="https://cdn.jsdelivr.net/npm/voodoojs@1.0.0/dist/voodoo.full.min.js" id="voodoo-js" data-manual async></script>
 <script type="module" src="js/main.js"></script>
+<!-- modulepreload:start -->
+<link rel="modulepreload" href="js/app.js">
+<link rel="modulepreload" href="js/commands.js">
+<link rel="modulepreload" href="js/context-menu.js">
+<link rel="modulepreload" href="js/dialogs-html.js">
+<link rel="modulepreload" href="js/engine/assets.js">
+<link rel="modulepreload" href="js/engine/document.js">
+<link rel="modulepreload" href="js/engine/patterns.js">
+<link rel="modulepreload" href="js/engine/render.js">
+<link rel="modulepreload" href="js/engine/selection.js">
+<link rel="modulepreload" href="js/engine/text.js">
+<link rel="modulepreload" href="js/files.js">
+<link rel="modulepreload" href="js/i18n.js">
+<link rel="modulepreload" href="js/live.js">
+<link rel="modulepreload" href="js/media.js">
+<link rel="modulepreload" href="js/projects.js">
+<link rel="modulepreload" href="js/segmenter.js">
+<link rel="modulepreload" href="js/tools/create.js">
+<link rel="modulepreload" href="js/tools/paint.js">
+<link rel="modulepreload" href="js/tools/select.js">
+<link rel="modulepreload" href="js/tools/transform.js">
+<link rel="modulepreload" href="js/ui-context.js">
+<link rel="modulepreload" href="js/ui-dialogs.js">
+<link rel="modulepreload" href="js/ui-extra.js">
+<link rel="modulepreload" href="js/ui-live.js">
+<link rel="modulepreload" href="js/ui-quick.js">
+<link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/version.js">
+<link rel="modulepreload" href="js/view/viewport.js">
+<link rel="modulepreload" href="lib/blend.js">
+<link rel="modulepreload" href="lib/brush.js">
+<link rel="modulepreload" href="lib/bytes.js">
+<link rel="modulepreload" href="lib/call.js">
+<link rel="modulepreload" href="lib/chat.js">
+<link rel="modulepreload" href="lib/color/cmyk.js">
+<link rel="modulepreload" href="lib/color/convert.js">
+<link rel="modulepreload" href="lib/doc.js">
+<link rel="modulepreload" href="lib/dsp.js">
+<link rel="modulepreload" href="lib/emitter.js">
+<link rel="modulepreload" href="lib/filters/adjust.js">
+<link rel="modulepreload" href="lib/filters/core.js">
+<link rel="modulepreload" href="lib/filters/effects.js">
+<link rel="modulepreload" href="lib/filters/heal.js">
+<link rel="modulepreload" href="lib/filters/inpaint.js">
+<link rel="modulepreload" href="lib/filters/liquify.js">
+<link rel="modulepreload" href="lib/filters/looks.js">
+<link rel="modulepreload" href="lib/filters/registry.js">
+<link rel="modulepreload" href="lib/filters/tone.js">
+<link rel="modulepreload" href="lib/fingerprint.js">
+<link rel="modulepreload" href="lib/formats/binary.js">
+<link rel="modulepreload" href="lib/formats/index.js">
+<link rel="modulepreload" href="lib/formats/magic.js">
+<link rel="modulepreload" href="lib/formats/png.js">
+<link rel="modulepreload" href="lib/formats/quantize.js">
+<link rel="modulepreload" href="lib/geometry.js">
+<link rel="modulepreload" href="lib/history.js">
+<link rel="modulepreload" href="lib/ice.js">
+<link rel="modulepreload" href="lib/mask.js">
+<link rel="modulepreload" href="lib/mqtt.js">
+<link rel="modulepreload" href="lib/pairing.js">
+<link rel="modulepreload" href="lib/paths.js">
+<link rel="modulepreload" href="lib/pixels.js">
+<link rel="modulepreload" href="lib/project.js">
+<link rel="modulepreload" href="lib/qr.js">
+<link rel="modulepreload" href="lib/relay.js">
+<link rel="modulepreload" href="lib/rendezvous.js">
+<link rel="modulepreload" href="lib/rtc.js">
+<link rel="modulepreload" href="lib/segment.js">
+<link rel="modulepreload" href="lib/session.js">
+<link rel="modulepreload" href="lib/sha256.js">
+<link rel="modulepreload" href="lib/sticker.js">
+<link rel="modulepreload" href="lib/styles.js">
+<link rel="modulepreload" href="lib/textlayout.js">
+<link rel="modulepreload" href="lib/transfer.js">
+<link rel="modulepreload" href="lib/wire.js">
+<link rel="modulepreload" href="lib/wordlist.js">
+<link rel="modulepreload" href="lib/words.js">
+<!-- modulepreload:end -->
 </head>
 <body class="px antialiased" data-workspace="pro">
 
@@ -28,6 +106,8 @@
     <p class="loader-name">pixelotter</p>
     <div class="loader-bar"><span id="loader-fill"></span></div>
     <p id="loader-step" class="loader-step">Opening the darkroom</p>
+    <p id="loader-help" class="loader-help" hidden></p>
+    <button type="button" id="loader-retry" class="loader-retry" hidden onclick="location.reload()">Try again</button>
   </div>
 </div>
 
@@ -230,7 +310,7 @@
         </div>
         <button type="button" class="doc-tab-new" @click="run('file.new')" :aria-label="$t('cmd.file.new')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
       </div>
-      <div id="viewport" class="viewport" v-show="S.screen === 'editor'" :class="{ 'no-rulers': !S.view.rulers || S.workspace === 'quick' }">
+      <div id="viewport" tabindex="0" :aria-label="$t('ctx.canvas')" class="viewport" v-show="S.screen === 'editor'" :class="{ 'no-rulers': !S.view.rulers || S.workspace === 'quick' }">
         <canvas class="vp-corner" aria-hidden="true"></canvas>
         <canvas class="vp-ruler-x" aria-hidden="true"></canvas>
         <canvas class="vp-ruler-y" aria-hidden="true"></canvas>
@@ -414,6 +494,18 @@
             </footer>
           </div>
 
+          <!-- Channels -->
+          <div v-if="g.active === 'channels'" class="p-channels" v-init="syncChannelsNow()">
+            <ul class="channel-list" :aria-label="$t('panel.channels')">
+              <li class="channel-row" v-for="ch in S.channels.list" :key="ch.id" :class="{ active: S.channels.solo === ch.id || (ch.id === 'rgb' && !S.channels.solo) }" :data-channel="ch.id">
+                <button type="button" class="eye" v-show="S.channels.mode === 'rgb'" @click="toggleChannel(ch.id)" :aria-label="ch.label" :aria-pressed="channelVisible(ch.id) ? 'true' : 'false'"><svg class="ic" aria-hidden="true"><use :href="channelVisible(ch.id) ? 'icons.svg#i-eye' : 'icons.svg#i-eye-off'"/></svg></button>
+                <button type="button" class="channel-pick" @click="soloChannel(ch.id)"><span class="thumb"><img :src="ch.thumb" alt=""></span><span class="layer-name">{ ch.label }</span></button>
+                <button type="button" class="icon-btn sm" @click="channelSelection(ch.id)" :title="$t('channels.load')" :aria-label="$t('channels.load') + ': ' + ch.label"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-marquee-ellipse"/></svg></button>
+              </li>
+            </ul>
+            <p class="panel-hint">{ S.channels.mode === 'cmyk' ? $t('channels.cmykHint') : $t('channels.hint') }</p>
+          </div>
+
           <!-- Paths -->
           <div v-if="g.active === 'paths'" class="p-paths">
             <ul class="list-plain"><li v-for="p in S.doc.paths" :key="p.id" :class="{ active: p.active }"><button type="button" @click="selectPath(p.id)"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-pen"/></svg>{ p.name }<small>{ p.points } { $t('paths.points') }</small></button></li></ul>
@@ -450,15 +542,16 @@
                 <button type="button" class="tab" v-for="lt in ['people','chat','call']" :key="lt" :class="{ 'tab-active': S.liveTab === lt }" @click="S.liveTab = lt; lt === 'chat' && (S.live.unread = 0)">{ $t('live.' + lt) }</button>
               </div>
               <ul class="people" v-show="S.liveTab === 'people'">
-                <li v-for="p in S.live.peers" :key="p.id"><span class="peer-dot" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }">{ p.name.slice(0, 1).toUpperCase() }</span><b>{ p.name }{ p.me ? ' (' + $t('live.you') + ')' : '' }</b><small>{ p.host ? $t('live.owner') : $t('live.role.' + p.role) }</small>
+                <li v-for="p in S.live.peers" :key="p.id" :data-peer="p.id" tabindex="0"><span class="peer-dot" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }">{ p.name.slice(0, 1).toUpperCase() }</span><b>{ p.name }{ p.me ? ' (' + $t('live.you') + ')' : '' }</b><small>{ p.host ? $t('live.owner') : $t('live.role.' + p.role) }</small>
                   <button type="button" class="btn btn-xs btn-ghost" v-show="!p.me" @click="followPeer(p.id)">{ S.live.follow === p.id ? $t('live.unfollow') : $t('live.follow') }</button>
                   <select class="select select-xs" v-show="S.live.mode === 'host' && !p.host" .value="p.role" @change="setRole(p.id, $event.target.value)" :aria-label="$t('live.roleLabel')"><option value="edit">{ $t('live.role.edit') }</option><option value="view">{ $t('live.role.view') }</option></select>
+                  <details class="safety" v-show="p.safety"><summary>{ $t('live.safety') }</summary><code class="mono" :data-peer="p.id">{ p.safety }</code><small>{ $t('live.safetyHint') }</small></details>
                 </li>
               </ul>
               <button type="button" class="btn btn-xs btn-soft" v-show="S.live.mode === 'host' && S.liveTab === 'people'" @click="inviteMore()">{ $t('live.inviteMore') }</button>
               <div class="chat-box" v-show="S.liveTab === 'chat'">
                 <div class="chat-log" id="chat-log" aria-live="polite">
-                  <div class="chat" v-for="m in S.chat" :key="m.id" :class="m.mine ? 'chat-end' : 'chat-start'">
+                  <div class="chat" v-for="m in S.chat" :key="m.id" :class="m.mine ? 'chat-end' : 'chat-start'" :data-msg="m.id" tabindex="0">
                     <div class="chat-header"><b :style="{ color: m.color }">{ m.name }</b></div>
                     <div class="chat-reply" v-show="m.reply">{ m.reply ? m.reply.name + ': ' + m.reply.text.slice(0, 60) : '' }</div>
                     <div class="chat-bubble"><span v-show="m.text">{ m.text }</span><img v-show="m.url" :src="m.url" alt="" class="chat-img"></div>
@@ -480,6 +573,12 @@
                   <button type="button" class="icon-btn sm" v-show="S.call.inCall" @click="toggleCamera()" :class="{ on: S.call.camera }" :aria-label="$t('call.camera')" data-action="camera"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-camera"/></svg></button>
                   <button type="button" class="icon-btn sm" v-show="S.call.inCall" @click="toggleScreen()" :class="{ on: S.call.screen }" :aria-label="$t('call.screen')" data-action="screen"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-desktop"/></svg></button>
                   <span class="call-proc" v-show="S.call.processing">{ $t('call.processing.' + S.call.processing) }</span>
+                </div>
+                <div class="call-devices" v-show="S.call.inCall">
+                  <label class="field"><span class="label">{ $t('settings.mic') }</span><select class="select select-xs" id="call-mic" .value="S.settings.call.inputId" @change="pickDevice('mic', $event.target.value)"><option value="">{ $t('settings.default') }</option><option v-for="d in S.devices.inputs" :key="d.id" :value="d.id">{ d.label }</option></select></label>
+                  <label class="field"><span class="label">{ $t('settings.camera') }</span><select class="select select-xs" id="call-camera" .value="S.settings.call.cameraId" @change="pickDevice('camera', $event.target.value)"><option value="">{ $t('settings.default') }</option><option v-for="d in S.devices.cameras" :key="d.id" :value="d.id">{ d.label }</option></select></label>
+                  <label class="field" v-show="S.devices.outputs.length"><span class="label">{ $t('settings.speaker') }</span><select class="select select-xs" id="call-speaker" .value="S.settings.call.outputId" @change="pickDevice('speaker', $event.target.value)"><option value="">{ $t('settings.default') }</option><option v-for="d in S.devices.outputs" :key="d.id" :value="d.id">{ d.label }</option></select></label>
+                  <label class="field"><span class="label">{ $t('settings.noise') }</span><select class="select select-xs" id="call-noise" .value="S.settings.call.noiseMode" @change="pickDevice('noise', $event.target.value)"><option value="strong">{ $t('noise.strong') }</option><option value="standard">{ $t('noise.standard') }</option><option value="off">{ $t('noise.off') }</option></select></label>
                 </div>
                 <div class="tiles" id="call-tiles"></div>
               </div>

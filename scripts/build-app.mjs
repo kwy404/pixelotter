@@ -32,12 +32,26 @@ for (const file of walk(src).filter((f) => f.endsWith('.js')).sort()) {
 // Stale copies of removed sources
 const stale = walk(lib).filter((f) => !outputs.has(f));
 
+// Every module the editor needs to start, fetched in parallel instead of one import level at a
+// time. Workers, the audio worklet and the codecs that load on first use stay out.
+const indexPath = join(app, 'index.html');
+if (existsSync(indexPath)) {
+  const LAZY = /(segment-worker|denoise-worklet)\.js$|lib\/formats\/(psd|tiff|pdf|gif|bmp|tga|hdr|raw)\.js$/;
+  const mods = [...walk(join(app, 'js')), ...[...outputs.keys()].filter((f) => f.startsWith(lib))]
+    .map((f) => relative(app, f).split(sep).join('/'))
+    .filter((f) => f.endsWith('.js') && f !== 'js/main.js' && !LAZY.test(f))
+    .sort();
+  const links = mods.map((m) => `<link rel="modulepreload" href="${m}">`).join('\n');
+  const html = readFileSync(indexPath, 'utf8').replace(/<!-- modulepreload:start -->[\s\S]*?<!-- modulepreload:end -->/, `<!-- modulepreload:start -->\n${links}\n<!-- modulepreload:end -->`);
+  outputs.set(indexPath, html);
+}
+
 const swPath = join(app, 'sw.js');
 if (existsSync(swPath)) {
   const files = new Map();
   for (const file of walk(app)) {
     if (file === swPath || file.startsWith(lib)) continue;
-    files.set(file, readFileSync(file));
+    files.set(file, outputs.has(file) ? Buffer.from(outputs.get(file)) : readFileSync(file));
   }
   for (const [file, text] of outputs) files.set(file, Buffer.from(text));
   const list = [...files.keys()].map((f) => relative(app, f).split(sep).join('/')).sort();

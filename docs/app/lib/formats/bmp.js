@@ -4,11 +4,12 @@
 // header (or 24 bit when opaque). ICO reads every entry (PNG or BMP) and opens the largest one;
 // it writes PNG entries at several sizes.
 
-import { FormatError, Reader, Writer, image, startsWith } from './binary.js';
+import { FormatError, Reader, Writer, image } from './binary.js';
 import { decodePng, encodePng, isPng } from './png.js';
+import { isBmp, isIco } from './magic.js';
 
-export const isBmp = (b) => startsWith(b, [0x42, 0x4d]);
-export const isIco = (b) => startsWith(b, [0, 0, 1, 0]) && b.length > 22 && b[4] + b[5] * 256 > 0;
+export { isBmp, isIco };
+
 
 function maskShift(mask) {
   if (!mask) return { shift: 0, max: 1 };

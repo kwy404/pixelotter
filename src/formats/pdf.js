@@ -5,10 +5,12 @@
 // The reader pulls image XObjects out of simple PDFs (like the ones we write). Any other PDF is
 // rendered page by page in the browser with pdf.js, loaded on demand (see the app's codecs).
 
-import { FormatError, ascii, startsWith, zlibDeflate, zlibInflate } from './binary.js';
+import { FormatError, ascii, zlibDeflate, zlibInflate } from './binary.js';
 import { cmykToRgb } from '../color/cmyk.js';
+import { isPdf } from './magic.js';
 
-export const isPdf = (b) => startsWith(b, [0x25, 0x50, 0x44, 0x46]);
+export { isPdf };
+
 
 const enc = new TextEncoder();
 const num = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(4).replace(/0+$/, '').replace(/\.$/, ''));

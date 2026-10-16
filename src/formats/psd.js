@@ -6,11 +6,13 @@
 // Writing produces RGB or CMYK documents, 8 bits, with the same layer features, run length
 // compressed, plus the flattened composite that every reader expects.
 
-import { FormatError, Reader, Writer, image, packBits, startsWith, unpackBits, zlibInflate } from './binary.js';
+import { FormatError, Reader, Writer, image, packBits, unpackBits, zlibInflate } from './binary.js';
 import { cmykToRgb } from '../color/cmyk.js';
 import { labToRgb } from '../color/convert.js';
+import { isPsd } from './magic.js';
 
-export const isPsd = (b) => startsWith(b, [0x38, 0x42, 0x50, 0x53]);
+export { isPsd };
+
 
 export const BLEND_KEYS = {
   norm: 'normal',

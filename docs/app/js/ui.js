@@ -28,7 +28,7 @@ export function installShell(ctx) {
   };
 
   // ---------- menus ----------
-  S.menuBar = MENUS.map(([label], i) => ({ label, id: i }));
+  S.menuBar = MENUS.map(([label]) => ({ label, id: label.slice(5) }));
 
   const labelFor = (id) => {
     const [cmd, arg] = id.split(':');
@@ -41,6 +41,12 @@ export function installShell(ctx) {
   const checked = (id) => {
     const v = S.view;
     return { 'view.rulers': v.rulers, 'view.grid': v.grid, 'view.guides': v.guides, 'view.snap': v.snap, 'view.proof': v.proof, 'view.gamut': v.gamut, 'window.pro': S.workspace === 'pro', 'window.quick': S.workspace === 'quick', [`image.mode.${S.doc.mode}`]: true, 'help.english': S.lang === 'en', 'help.portuguese': S.lang === 'pt-BR' }[id] ?? (id.startsWith('window.') ? isPanelOpen(id.slice(7)) : false);
+  };
+  // one command as a context menu item (the same label, shortcut and enabled state as the menus)
+  ctx.cmdItem = (id, extra = {}) => {
+    const [cmd, arg] = id.split(':');
+    const c = app.commands.list.get(cmd);
+    return { label: labelFor(id), key: keyLabel(c?.key?.split(' | ')[0] ?? ''), disabled: !app.commands.can(cmd), run: () => (arg === undefined ? app.run(cmd) : app.run(cmd, arg)), ...extra };
   };
   const build = (items) =>
     items.map((it) => {
@@ -423,9 +429,15 @@ export function installShell(ctx) {
     new Promise((resolve) => {
       fileInput.multiple = multiple;
       fileInput.value = '';
-      fileInput.onchange = () => resolve([...fileInput.files]);
+      fileInput.onchange = () => {
+        fileInput.onchange = openPicked;
+        resolve([...fileInput.files]);
+      };
       fileInput.click();
     });
+  // files given to the input without a picker (drag and drop helpers, tests) open as documents
+  const openPicked = () => ctx.openFiles([...fileInput.files]);
+  fileInput.onchange = openPicked;
   ui.open = async () => {
     let files = [];
     if (window.showOpenFilePicker) {
