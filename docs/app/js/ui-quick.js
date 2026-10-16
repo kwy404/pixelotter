@@ -29,6 +29,9 @@ export function installQuick(ctx) {
     const m = String(err?.message ?? err);
     return t('model.error', { reason: m });
   };
+  // the quick select tool asks the app for these
+  app.modelError = (err) => ctx.modelError(err);
+  app.subjectMask = () => ctx.subjectMask();
 
   /** A mask (document sized) of the main subject of the whole picture. */
   ctx.subjectMask = async () => {
@@ -296,18 +299,33 @@ export function installQuick(ctx) {
   };
 
   // ---------- inline text editor ----------
+  // A transparent textarea over the text layer gives the caret, selection, typing, arrows,
+  // Backspace and Enter for new lines; the canvas draws the text live under it. Escape, a click
+  // outside or another tool commits the edit as one undoable step.
   const ta = document.getElementById('text-editor');
   let editing = null;
+  /** The layer name that follows the text: its first line, shortened. */
+  const nameFor = (text) => text.split('\n').find((x) => x.trim())?.trim().slice(0, 40) || t('layer.text');
   app.textEditor = {
+    isOpen: () => !!editing,
+    editingId: () => editing?.id ?? null,
     open(id, selectAll) {
+      if (editing) this.close();
       const l = findLayer(app.edoc.doc, id);
-      if (!l) return;
-      editing = { id, before: l.text };
+      if (!l || l.type !== 'text') return;
+      editing = { id, before: l.text, ready: false };
       ta.hidden = false;
       ta.value = l.text;
       place();
-      ta.focus();
-      if (selectAll) ta.select();
+      // the click that opened the editor moves the focus to the canvas after this handler
+      // runs, so the textarea takes the focus once that click is done
+      setTimeout(() => {
+        if (editing?.id !== id) return;
+        editing.ready = true;
+        ta.focus({ preventScroll: true });
+        if (selectAll) ta.select();
+        else ta.setSelectionRange(ta.value.length, ta.value.length);
+      }, 0);
     },
     close() {
       if (!editing) return;
@@ -324,35 +342,54 @@ export function installQuick(ctx) {
       }
       if (l.text !== before) {
         const text = l.text;
+        const props = { text };
+        // the name follows the text until the layer is renamed by hand
+        if (l.name === nameFor(before) || l.name === t('layer.text') || l.name === t('text.placeholder')) props.name = nameFor(text);
         app.edoc.apply([{ t: 'set', id, props: { text: before } }]);
-        app.edoc.commit(t('history.editText'), [{ t: 'set', id, props: { text } }], { icon: 'text' });
+        app.edoc.commit(t('history.editText'), [{ t: 'set', id, props }], { icon: 'text' });
       }
     },
   };
   const place = () => {
     if (!editing) return;
     const l = findLayer(app.edoc.doc, editing.id);
+    if (!l) return;
     const s = app.vp.toScreen(l.x, l.y);
     const box = app.renderer.size(l);
     const z = app.vp.view.zoom * Math.abs(l.scaleX);
     ta.style.left = `${s.x}px`;
     ta.style.top = `${s.y}px`;
-    ta.style.width = `${Math.max(120, box.w * z)}px`;
-    ta.style.height = `${Math.max(40, box.h * z)}px`;
+    ta.style.width = `${Math.max(120, box.w * z + 8)}px`;
+    ta.style.height = `${Math.max(40, box.h * z + 8)}px`;
     ta.style.transform = `translate(-50%, -50%) rotate(${l.rotation}deg)`;
     ta.style.font = `${l.italic ? 'italic ' : ''}${l.weight} ${Math.max(10, l.size * z)}px "${l.font}"`;
     ta.style.textAlign = l.align;
     ta.style.lineHeight = String(l.lineHeight);
   };
+  app.textEditor.place = place;
   ta.addEventListener('input', () => {
     if (!editing) return;
     app.edoc.apply([{ t: 'set', id: editing.id, props: { text: ta.value } }]);
     place();
   });
-  ta.addEventListener('blur', () => app.textEditor.close());
+  ta.addEventListener('blur', () => {
+    if (editing?.ready) app.textEditor.close();
+  });
   ta.addEventListener('keydown', (e) => {
+    // keys typed into the text never reach the editor's shortcuts
+    e.stopPropagation();
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && (k === 'b' || k === 'i')) {
+      e.preventDefault();
+      const o = S.options.text;
+      if (k === 'b') o.weight = o.weight >= 600 ? 400 : 700;
+      else o.italic = !o.italic;
+      globals.textOpt(k === 'b' ? 'weight' : 'italic');
+      return;
+    }
     if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) {
       e.preventDefault();
+      app.textEditor.close();
       ta.blur();
     }
   });
@@ -370,10 +407,21 @@ export function installQuick(ctx) {
       }
       return;
     }
-    if (l?.type === 'text' && key in o) {
+    if (l?.type === 'text' && key in o && o[key] !== null && o[key] !== '' && o[key] !== l[key]) {
+      if (key === 'size' && !(Number(o.size) >= 4)) return;
       app.edoc.commit(t('history.textStyle'), [{ t: 'set', id: l.id, props: { [key]: o[key] } }], { merge: `text:${key}:${l.id}`, icon: 'text' });
-      if (key === 'font' || key === 'weight') app.applyFontLater(app.edoc.layer(l.id));
+      if (key === 'font' || key === 'weight' || key === 'italic') app.applyFontLater(app.edoc.layer(l.id));
+      app.textEditor.place();
     }
+  };
+  // the options bar shows the style of the selected text layer
+  const onActive = ctx.onActiveChanged;
+  ctx.onActiveChanged = () => {
+    onActive?.();
+    const l = app.edoc?.activeLayer;
+    if (l?.type !== 'text') return;
+    const o = S.options.text;
+    for (const k of ['font', 'size', 'weight', 'italic', 'color', 'align']) if (o[k] !== l[k]) o[k] = l[k];
   };
 
   // ---------- samples ----------

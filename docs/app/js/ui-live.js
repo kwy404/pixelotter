@@ -5,6 +5,7 @@
 
 import { resolvePhrase, resolveWord, splitPhrase, suggestWords, wordsFromLink } from '../lib/words.js';
 import { Live } from './live.js';
+import { PEER_COLORS } from '../lib/session.js';
 import { download } from './files.js';
 import { openFile } from './files.js';
 
@@ -16,7 +17,44 @@ export function installLive(ctx) {
   S.chat = [];
   S.call = { inCall: false, muted: false, camera: false, screen: false, processing: null, speaking: [], tiles: [] };
 
+  // ---------- my name and color, asked once before the first live session ----------
+  S.dlg.name = { name: '', color: PEER_COLORS[0], colors: [...PEER_COLORS] };
+  let nameDone = null;
+  ui.ensureName = () => {
+    const auto = S.settings.color || PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
+    if (S.settings.name.trim()) {
+      // named before: the color is picked for them, and can be changed in Settings
+      if (!S.settings.color) {
+        S.settings.color = auto;
+        ctx.saveLocal();
+      }
+      return Promise.resolve(true);
+    }
+    S.dlg.name = { name: '', color: auto, colors: [...PEER_COLORS] };
+    ui.openDialog('dlg-name');
+    setTimeout(() => document.getElementById('name-input')?.focus(), 50);
+    return new Promise((resolve) => (nameDone = resolve));
+  };
+  const finishName = (ok) => {
+    ui.closeDialog('dlg-name');
+    const done = nameDone;
+    nameDone = null;
+    done?.(ok);
+  };
+  globals.nameOk = () => {
+    const name = S.dlg.name.name.trim().slice(0, 40);
+    if (!name) return;
+    S.settings.name = name;
+    S.settings.color = S.dlg.name.color;
+    ctx.saveLocal();
+    finishName(true);
+  };
+  globals.nameCancel = () => finishName(false);
+  document.getElementById('dlg-name')?.addEventListener('close', () => nameDone && finishName(false));
+  globals.goToPeer = (peer) => live.goToPeer(peer);
+
   ui.liveDialog = async () => {
+    if (live.mode === 'off' && !(await ui.ensureName())) return;
     ui.openDialog('dlg-live');
     ui.openPanel('live');
     if (live.mode === 'off') await live.host();
@@ -118,6 +156,7 @@ export function installLive(ctx) {
       return;
     }
     S.dlg.join.error = '';
+    if (!(await ui.ensureName())) return;
     await live.join(res.words);
   };
   globals.confirmWords = () => live.confirmTyped(read('confirm-word-'));

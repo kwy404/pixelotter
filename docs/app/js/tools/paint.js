@@ -123,13 +123,13 @@ const MODE = {
   'spot-heal': 'paint',
 };
 
-function makePaintTool(id, { group, key, icon, defaults }) {
+function makePaintTool(id, { group, shortcut, icon, defaults }) {
   return {
     id,
     group,
-    key,
+    shortcut,
     icon,
-    cursor: 'none',
+    cursor: 'brush',
     defaults: { size: 40, hardness: 0.8, opacity: 1, flow: 1, spacing: 0.15, ...defaults },
     down(app, p) {
       const o = app.opts(id);
@@ -156,7 +156,7 @@ function makePaintTool(id, { group, key, icon, defaults }) {
       if (id === 'spot-heal') color = [255, 0, 255];
       const scale = Math.max(Math.abs(target.layer.scaleX), Math.abs(target.layer.scaleY)) || 1;
       const diameter = id === 'pencil' ? Math.max(1, Math.round(o.size / scale)) : o.size / scale;
-      const tip = brushTip(diameter, id === 'pencil' ? 1 : o.hardness);
+      const tip = id === 'pencil' ? brushTip(diameter, 1, { aliased: true }) : brushTip(diameter, o.hardness);
       const options = { range: o.range, exposure: o.exposure, saturate: o.saturate !== 'desaturate', strength: o.strength };
       if (id === 'clone' || id === 'heal') {
         const a = app.edoc.assets.get(target.asset);
@@ -235,29 +235,10 @@ function makePaintTool(id, { group, key, icon, defaults }) {
       w.flush({ x0: 0, y0: 0, x1: s.region.w, y1: s.region.h });
       void app;
     },
+    // the brush outline itself is the viewport's cursor element; this marks the clone source
     overlay(ctx, vp, app) {
-      if (!vp.cursorPos) return;
-      const o = app.opts(id);
-      const p = vp.toScreen(vp.cursorPos.x, vp.cursorPos.y);
-      const r = Math.max(1.5, (o.size / 2) * vp.view.zoom);
       ctx.save();
       ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r + 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r - 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      if (r < 4) {
-        ctx.beginPath();
-        ctx.moveTo(p.x - 6, p.y);
-        ctx.lineTo(p.x + 6, p.y);
-        ctx.moveTo(p.x, p.y - 6);
-        ctx.lineTo(p.x, p.y + 6);
-        ctx.stroke();
-      }
       if ((id === 'clone' || id === 'heal') && app.cloneSource) {
         const sp = vp.toScreen(app.cloneSource.x, app.cloneSource.y);
         ctx.strokeStyle = '#c08a4e';

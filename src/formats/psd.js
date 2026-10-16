@@ -4,7 +4,9 @@
 // objects, text and vector data are opened as their pixel previews (the layer pixels the file
 // stores), and 32 bit documents are reported as unsupported.
 // Writing produces RGB or CMYK documents, 8 bits, with the same layer features, run length
-// compressed, plus the flattened composite that every reader expects.
+// compressed, plus the flattened composite that every reader expects. A layer can carry a
+// short private note (`meta`, text) in a 'pxot' block that other readers skip; pixelotter keeps
+// its editable text layers in it, next to their pixels.
 
 import { FormatError, Reader, Writer, image, packBits, unpackBits, zlibInflate } from './binary.js';
 import { cmykToRgb } from '../color/cmyk.js';
@@ -189,6 +191,7 @@ export async function decodePsd(bytes) {
         r.skip(r.u32()); // blending ranges
         let name = pascal(r, 4);
         let section = 0;
+        let meta = null;
         while (r.pos + 12 <= extraEnd) {
           const sig = r.ascii(4);
           if (sig !== '8BIM' && sig !== '8B64') break;
@@ -202,10 +205,15 @@ export async function decodePsd(bytes) {
             for (let q = 0; q < n; q++) s += String.fromCharCode(r.u16());
             name = s.replace(/\u0000+$/, '');
           } else if (k === 'lsct' || k === 'lsdk') section = r.u32();
+          else if (k === 'pxot' && len > 4 && len < 1 << 20) {
+            const n = r.u32();
+            r.need(n);
+            meta = new TextDecoder().decode(r.bytes.subarray(r.pos, r.pos + Math.min(n, len - 4)));
+          }
           r.seek(Math.min(extraEnd, at + len + (len & 1 && k !== 'luni' ? 0 : 0)));
         }
         r.seek(extraEnd);
-        recs.push({ top, left, bottom, right, chans, key, opacity, visible: !(flags & 2), mask, name, section });
+        recs.push({ top, left, bottom, right, chans, key, opacity, visible: !(flags & 2), mask, name, section, meta });
       }
       // channel image data follows the records, in the same order
       for (const rec of recs) {
@@ -250,7 +258,7 @@ export async function decodePsd(bytes) {
         let mask = null;
         const mp = rec.planes[-2] ?? rec.planes[-3];
         if (rec.mask && mp) mask = { ...rec.mask, data: mp };
-        layers.push({ kind: 'raster', name: rec.name || 'Layer', x: rec.left, y: rec.top, width: w, height: h, data, opacity: rec.opacity / 255, blend: BLEND_KEYS[rec.key] ?? 'normal', visible: rec.visible, mask, parent });
+        layers.push({ kind: 'raster', name: rec.name || 'Layer', x: rec.left, y: rec.top, width: w, height: h, data, opacity: rec.opacity / 255, blend: BLEND_KEYS[rec.key] ?? 'normal', visible: rec.visible, mask, parent, ...(rec.meta ? { meta: rec.meta } : {}) });
       }
     }
   }
@@ -398,6 +406,13 @@ export function encodePsd(doc, { psb = false, cmyk = false } = {}) {
     w.u32(padded).u32(name.length);
     for (const ch of name) w.u16(ch.charCodeAt(0));
     w.pad(padded - uLen);
+    if (!isGroup && typeof l.meta === 'string' && l.meta) {
+      const bytes = new TextEncoder().encode(l.meta);
+      const len = 4 + bytes.length;
+      const padded = len + ((4 - (len % 4)) % 4);
+      w.ascii('8BIM').ascii('pxot').u32(padded).u32(bytes.length).bytes(bytes);
+      w.pad(padded - len);
+    }
     if (isGroup) {
       w.ascii('8BIM').ascii('lsct').u32(12).u32(l.marker ? 3 : l.collapsed ? 2 : 1).ascii('8BIM').ascii(l.marker ? 'norm' : 'pass');
     }

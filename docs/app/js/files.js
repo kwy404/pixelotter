@@ -76,6 +76,23 @@ export const platform = {
 
 export const ACCEPT = '.pxo,image/*,.psd,.psb,.tif,.tiff,.tga,.ico,.cur,.bmp,.pdf,.exr,.hdr,.pbm,.pgm,.ppm,.pnm,.pam,.heic,.heif,.avif,.svg,.cr2,.cr3,.nef,.arw,.dng,.orf,.rw2,.raf,.pef,.srw';
 
+const TEXT_KEYS = ['text', 'font', 'size', 'weight', 'italic', 'color', 'align', 'lineHeight', 'letterSpacing', 'outline', 'shadow', 'curve', 'bubble', 'x', 'y', 'rotation', 'scaleX', 'scaleY'];
+const textProps = (l) => Object.fromEntries(TEXT_KEYS.filter((k) => k in l).map((k) => [k, l[k]]));
+
+/** The editable text a PSD layer written by pixelotter carries, or null. */
+function textFromMeta(meta) {
+  if (typeof meta !== 'string') return null;
+  try {
+    const m = JSON.parse(meta);
+    return m?.type === 'text' && m.layer && typeof m.layer.text === 'string' ? textProps(m.layer) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Names the interface gives to layers made on open, in its language. */
+export const LAYER_NAMES = { background: 'Background' };
+
 /** Turns decoded layers (from lib/formats) into a document with assets. */
 export function documentFromDecoded(dec, name) {
   const doc = createDoc({ name: name.replace(/\.[^.]+$/, '') || 'Untitled', width: dec.width, height: dec.height, background: null });
@@ -89,9 +106,14 @@ export function documentFromDecoded(dec, name) {
       ops.push({ t: 'add', layer: makeLayer('group', { id: groupIds.get(l.id), name: l.name, opacity: l.opacity, blend: l.blend, visible: l.visible, collapsed: l.collapsed, parent }) });
       continue;
     }
+    const text = textFromMeta(l.meta);
+    if (text) {
+      ops.push({ t: 'add', layer: makeLayer('text', { ...text, id: newId(), name: l.name, opacity: l.opacity ?? 1, blend: l.blend ?? 'normal', visible: l.visible !== false, parent }) });
+      continue;
+    }
     const asset = newId('a');
     ops.push({ t: 'asset', id: asset, w: l.width, h: l.height, data: l.data });
-    const layer = { id: newId(), name: l.name, asset, w: l.width, h: l.height, x: l.x + l.width / 2, y: l.y + l.height / 2, opacity: l.opacity ?? 1, blend: l.blend ?? 'normal', visible: l.visible !== false, parent };
+    const layer = { id: newId(), name: l.name === 'Background' ? LAYER_NAMES.background : l.name, asset, w: l.width, h: l.height, x: l.x + l.width / 2, y: l.y + l.height / 2, opacity: l.opacity ?? 1, blend: l.blend ?? 'normal', visible: l.visible !== false, parent };
     if (l.mask?.data) {
       // a document space mask from the file's mask rectangle
       const m = newId('a');
@@ -271,6 +293,8 @@ function psdLayers(edoc, scale) {
     const crop = new Uint8ClampedArray(w * h * 4);
     for (let y = 0; y < h; y++) crop.set(data.subarray(((y0 + y) * W + x0) * 4, ((y0 + y) * W + x0 + w) * 4), y * w * 4);
     const rec = { kind: 'raster', name: l.name, x: x0, y: y0, width: w, height: h, data: crop, opacity: l.opacity, blend: l.blend, visible: l.visible, parent: l.parent };
+    // other editors show the text as pixels; pixelotter opens it as editable text again
+    if (l.type === 'text') rec.meta = JSON.stringify({ type: 'text', layer: { ...textProps(l), x: l.x * scale, y: l.y * scale, size: l.size * scale } });
     if (l.mask) {
       const m = r.maskCanvas({ ...l, mask: { ...l.mask, enabled: true } }, scale, W, H);
       if (m) {

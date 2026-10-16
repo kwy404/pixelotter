@@ -3,7 +3,7 @@
 // documents: layers, history, document info, status and selection.
 
 import { createDoc, layerTree, makeLayer, newId, isLocked } from '../lib/doc.js';
-import { apply, corners, boundsOf, layerMatrix, invert } from '../lib/geometry.js';
+import { apply, corners, boundsOf, layerMatrix, invert, hitTest } from '../lib/geometry.js';
 import { fromHex, rgbToHsv, toHex } from '../lib/color/convert.js';
 import { rgbToCmyk } from '../lib/color/cmyk.js';
 import { EditorDocument } from './engine/document.js';
@@ -58,6 +58,10 @@ export class App {
     this.pixelCache = null;
     this.thumbTimer = null;
     this.live = null;
+    // the brush outline follows the size of the current tool; tools draw their own guides
+    vp.cursorSize = () => this.opts(this.toolId).size ?? 0;
+    vp.toolOverlay = (ctx, view) => this.edoc && this.tool?.overlay?.(ctx, view, this);
+    vp.onDouble = (p) => this.doubleClick(p);
   }
 
   // ---------- documents and tabs ----------
@@ -185,6 +189,7 @@ export class App {
           thumb: this.thumbs?.get(l.id) ?? '',
           maskThumb: this.thumbs?.get(`${l.id}:mask`) ?? '',
           holder: holder ? { name: holder.name, color: holder.color } : null,
+          editors: this.live?.editorsOf?.(l.id) ?? [],
         });
         if (l.type === 'group' && !l.collapsed) walk(children, depth + 1);
       }
@@ -257,6 +262,7 @@ export class App {
 
   setTool(id) {
     if (!this.tools.has(id)) return;
+    this.textEditor?.close?.();
     if (this.edoc) this.tool?.deactivate?.(this);
     this.toolId = id;
     this.vp.toolId = id;
@@ -271,7 +277,7 @@ export class App {
   }
 
   setCursor(c) {
-    this.vp.stage.style.cursor = c;
+    this.vp.setCursor(c);
   }
 
   /** Pointer events from the viewport, routed to the current tool. */
@@ -488,6 +494,22 @@ export class App {
   /** Opens the inline text editor over a text layer. */
   editText(id, selectAll = false) {
     this.textEditor?.open(id, selectAll);
+  }
+
+  /** The topmost visible, unlocked text layer under a document point. */
+  textLayerAt(p) {
+    if (!this.edoc) return null;
+    const d = this.edoc.doc;
+    return [...d.layers].reverse().find((l) => l.type === 'text' && this.renderer.shown(l.id) && !isLocked(d, l.id) && hitTest(l, this.renderer.size(l), p)) ?? null;
+  }
+
+  /** Double click on the canvas: text opens for editing with the Text tool. */
+  doubleClick(p) {
+    const hit = this.textLayerAt(p);
+    if (!hit) return;
+    this.selectLayer(hit.id);
+    if (this.toolId !== 'text') this.setTool('text');
+    this.editText(hit.id, true);
   }
 
   async applyFontLater(l) {

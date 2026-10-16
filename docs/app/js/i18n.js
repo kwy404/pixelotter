@@ -4,6 +4,7 @@
 import { FILTERS } from '../lib/filters/registry.js';
 import { BLEND_MODES } from '../lib/blend.js';
 import { LOOK_NAMES } from '../lib/filters/looks.js';
+import { HELP_EN, HELP_PT } from './help-text.js';
 
 const en = {
   'app.name': 'pixelotter',
@@ -507,6 +508,7 @@ const en = {
   'tour.label': 'Tour',
   'tour.skip': 'Skip',
   'tour.next': 'Next',
+  'tour.back': 'Back',
   'tour.done': 'Start editing',
   'tour.welcome.title': 'Welcome to the darkroom',
   'tour.welcome.text': 'Open a photo, start from a size or try the sample. Everything stays on your device.',
@@ -1265,6 +1267,7 @@ const pt = {
   'tour.label': 'Tour',
   'tour.skip': 'Pular',
   'tour.next': 'Próximo',
+  'tour.back': 'Voltar',
   'tour.done': 'Começar a editar',
   'tour.welcome.title': 'Bem vindo ao laboratório',
   'tour.welcome.text': 'Abra uma foto, comece de um tamanho ou teste o exemplo. Tudo fica no seu aparelho.',
@@ -1418,7 +1421,7 @@ const pt = {
   'option.blacks': 'Pretos',
 };
 
-const TOOLS_PT = { move: 'Mover', marquee: 'Letreiro retangular', 'marquee-ellipse': 'Letreiro elíptico', lasso: 'Laço', 'lasso-poly': 'Laço poligonal', 'quick-select': 'Seleção rápida', wand: 'Varinha mágica', crop: 'Cortar', eyedropper: 'Conta gotas', 'spot-heal': 'Pincel de correção de manchas', heal: 'Pincel de recuperação', patch: 'Remendo', brush: 'Pincel', pencil: 'Lápis', clone: 'Carimbo', eraser: 'Borracha', gradient: 'Gradiente', bucket: 'Balde de tinta', blur: 'Desfoque', sharpen: 'Nitidez', smudge: 'Borrar', dodge: 'Subexposição', burn: 'Superexposição', sponge: 'Esponja', pen: 'Caneta', text: 'Texto', shape: 'Forma', hand: 'Mão', zoom: 'Zoom' };
+const TOOLS_PT = { move: 'Mover', marquee: 'Seleção retangular', 'marquee-ellipse': 'Seleção elíptica', lasso: 'Laço', 'lasso-poly': 'Laço poligonal', 'quick-select': 'Seleção rápida', wand: 'Varinha mágica', crop: 'Cortar', eyedropper: 'Conta gotas', 'spot-heal': 'Pincel de correção de manchas', heal: 'Pincel de recuperação', patch: 'Remendo', brush: 'Pincel', pencil: 'Lápis', clone: 'Carimbo', eraser: 'Borracha', gradient: 'Gradiente', bucket: 'Balde de tinta', blur: 'Desfoque', sharpen: 'Nitidez', smudge: 'Borrar', dodge: 'Subexposição', burn: 'Superexposição', sponge: 'Esponja', pen: 'Caneta', text: 'Texto', shape: 'Forma', hand: 'Mão', zoom: 'Zoom' };
 const CMDS_PT = {
   'file.new': 'Novo...', 'file.open': 'Abrir...', 'file.place': 'Inserir...', 'file.close': 'Fechar', 'file.closeAll': 'Fechar todos', 'file.save': 'Salvar', 'file.saveAs': 'Salvar como...', 'file.export': 'Exportar como...', 'file.quickExport': 'Exportar rápido como PNG', 'file.revert': 'Reverter', 'file.send': 'Enviar para um amigo...', 'file.share': 'Editar junto...', 'file.join': 'Entrar com seis palavras...', 'file.sticker': 'Criador de figurinhas...',
   'edit.undo': 'Desfazer', 'edit.redo': 'Refazer', 'edit.cut': 'Recortar', 'edit.copy': 'Copiar', 'edit.copyMerged': 'Copiar mesclado', 'edit.paste': 'Colar', 'edit.clear': 'Limpar', 'edit.fill': 'Preencher...', 'edit.stroke': 'Contornar...', 'edit.contentAware': 'Preenchimento sensível ao conteúdo...', 'edit.freeTransform': 'Transformação livre', 'edit.rotate90': 'Girar 90 horário', 'edit.rotate-90': 'Girar 90 anti horário', 'edit.rotate180': 'Girar 180', 'edit.flipH': 'Espelhar horizontal', 'edit.flipV': 'Espelhar vertical', 'edit.definePattern': 'Definir padrão', 'edit.settings': 'Configurações...', 'edit.shortcuts': 'Atalhos de teclado...',
@@ -1453,5 +1456,8 @@ for (const m of BLEND_MODES) pt[`blend.${m}`] = BLEND_PT[m];
 for (const l of LOOK_NAMES) pt[`look.${l}`] = LOOKS_PT[l];
 for (const [k, v] of Object.entries(LOOKS_PT)) pt[`option.${k}`] ??= v;
 for (const [k, v] of Object.entries(HISTORY_PT)) pt[`history.${k}`] = v;
+
+Object.assign(en, HELP_EN);
+Object.assign(pt, HELP_PT);
 
 export const MESSAGES = { en, 'pt-BR': pt };

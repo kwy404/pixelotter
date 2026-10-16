@@ -271,6 +271,14 @@ export function installShell(ctx) {
     app.edoc.commit(t('history.arrange'), ops, { icon: 'layers' });
   };
   globals.renameLayerInline = (id) => ui.renameLayer(id);
+  /** Double click on a layer thumbnail: text opens for editing, other layers are renamed. */
+  globals.editLayerContent = (id) => {
+    const l = findLayer(app.edoc.doc, id);
+    if (l?.type !== 'text') return ui.renameLayer(id);
+    app.selectLayer(id);
+    app.setTool('text');
+    app.editText(id, true);
+  };
   ui.renameLayer = async (id = app.edoc.active) => {
     const l = findLayer(app.edoc.doc, id);
     if (!l) return;
@@ -615,7 +623,8 @@ export function installShell(ctx) {
       app.vp.needsOverlay = true;
       return;
     }
-    if (k === 'tab') {
+    // Tab hides the panels only from the canvas; on a control it moves the focus as usual
+    if (k === 'tab' && (e.target === document.body || e.target.closest?.('#viewport'))) {
       e.preventDefault();
       document.body.classList.toggle('panels-hidden');
       setTimeout(() => app.vp.resize(), 0);

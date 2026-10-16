@@ -227,7 +227,7 @@ const quick = {
   group: 'select',
   shortcut: 'w',
   icon: 'quick-select',
-  cursor: 'none',
+  cursor: 'brush', // the viewport draws the outline at the brush size
   defaults: { size: 40, mode: 'add', tolerance: 28 },
   async down(app, p) {
     this.mode = p.alt ? 'subtract' : 'add';
@@ -241,7 +241,7 @@ const quick = {
         this.subjectRev = app.edoc.revision;
       } catch (err) {
         this.subject = null;
-        app.toast(app.modelError(err), 'warning');
+        app.toast(app.modelError?.(err) ?? String(err?.message ?? err), 'warning');
       }
       app.status('');
     }
@@ -290,25 +290,6 @@ const quick = {
     // record it as one undoable step: restore the starting selection first
     sel.set(this.startMask);
     app.edoc.commit(app.t('tool.quick-select'), [{ t: 'sel', data: mask }]);
-  },
-  overlay(ctx, vp, app) {
-    if (!vp.cursorPos) return;
-    const p = vp.toScreen(vp.cursorPos.x, vp.cursorPos.y);
-    const r = (app.opts('quick-select').size / 2) * vp.view.zoom;
-    ctx.save();
-    ctx.strokeStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(p.x - 4, p.y);
-    ctx.lineTo(p.x + 4, p.y);
-    if (this.mode !== 'subtract') {
-      ctx.moveTo(p.x, p.y - 4);
-      ctx.lineTo(p.x, p.y + 4);
-    }
-    ctx.stroke();
-    ctx.restore();
   },
 };
 

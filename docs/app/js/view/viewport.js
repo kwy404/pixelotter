@@ -6,6 +6,14 @@
 import { makeCanvas } from '../engine/assets.js';
 
 const DPR = () => globalThis.devicePixelRatio || 1;
+const SVG = 'http://www.w3.org/2000/svg';
+
+// An eyedropper drawn black on a white outline so it shows on any pixel; the hotspot is the tip.
+const EYEDROPPER = `url("data:image/svg+xml,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g fill='none' stroke-linecap='round' stroke-linejoin='round'><g stroke='#fff' stroke-width='4'><path d='M2.5 21.5l1-3.5 9-9 2.5 2.5-9 9z'/><path d='M11 7.5l5.5 5.5M14.5 9.5l3.5-3.5a2.1 2.1 0 0 0-3-3l-3.5 3.5'/></g><g stroke='#000' stroke-width='1.6'><path d='M2.5 21.5l1-3.5 9-9 2.5 2.5-9 9z' fill='#fff'/><path d='M11 7.5l5.5 5.5M14.5 9.5l3.5-3.5a2.1 2.1 0 0 0-3-3l-3.5 3.5' fill='#000'/></g></g></svg>",
+)}") 2 22, crosshair`;
+/** Tool cursor names that are not plain CSS cursors. */
+const CSS_CURSORS = { eyedropper: EYEDROPPER, brush: 'none' };
 export const ZOOM_STEPS = [0.02, 0.03, 0.05, 0.0667, 0.1, 0.125, 0.1667, 0.25, 0.333, 0.5, 0.667, 1, 1.5, 2, 3, 4, 5, 6, 8, 12, 16, 24, 32];
 
 export class Viewport {
@@ -36,13 +44,30 @@ export class Viewport {
     this.showGuides = true;
     this.snap = true;
     this.gamut = false;
-    this.peers = new Map(); // id -> { x, y, name, color, at }
+    this.peers = new Map(); // id -> { x, y (shown), tx, ty (latest), name, color, icon, label, ring, active, at }
+    this.peerSel = new Map(); // id -> { loops: [[x, y, x, y...]], color }: friends' selections
+    this.peerEls = new Map(); // id -> the cursor element of a friend
     this.overlays = []; // functions (ctx, view) drawn on top
     this.antsOffset = 0;
     this.cursorPos = null;
     this.frame = 0;
+    // the tool cursor: a CSS cursor, or for brushes an outline element that follows the pointer
+    this.cursorName = 'default';
+    this.cursorSize = null; // () => brush diameter in document pixels
+    this.hoverAt = null; // { sx, sy, type, down } in stage pixels
+    this.caps = false;
+    this.cursorEl = document.createElement('div');
+    this.cursorEl.className = 'vp-cursor';
+    this.cursorEl.setAttribute('aria-hidden', 'true');
+    this.cursorEl.hidden = true;
+    this.stage.append(this.cursorEl);
+    this.peerLayer = document.createElement('div');
+    this.peerLayer.className = 'vp-peers';
+    this.peerLayer.setAttribute('aria-hidden', 'true');
+    this.stage.append(this.peerLayer);
     this.bind();
     new ResizeObserver(() => this.resize()).observe(this.stage);
+    this.watchDpr();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
   }
@@ -54,19 +79,35 @@ export class Viewport {
     this.compositeScale = 0;
     if (edoc && (!edoc.view.zoom || edoc.view.fit)) this.fit();
     this.requestDraw();
+    this.applyCursor();
   }
 
   get view() {
     return this.edoc?.view ?? { zoom: 1, cx: 0, cy: 0 };
   }
 
+  /** Moving the window to another screen or zooming the page changes the pixel ratio. */
+  watchDpr() {
+    if (!globalThis.matchMedia) return;
+    const mq = matchMedia(`(resolution: ${DPR()}dppx)`);
+    mq.addEventListener?.('change', () => {
+      this.resize();
+      this.watchDpr();
+    }, { once: true });
+  }
+
   resize() {
     const r = this.stage.getBoundingClientRect();
-    this.w = Math.max(1, r.width);
-    this.h = Math.max(1, r.height);
+    const dpr = DPR();
+    // whole device pixels and a CSS size that matches them exactly, so the canvas is never
+    // resampled on its way to the screen
+    const cw = Math.max(1, Math.round(r.width * dpr));
+    const ch = Math.max(1, Math.round(r.height * dpr));
+    this.w = cw / dpr;
+    this.h = ch / dpr;
     for (const c of [this.display, this.overlay]) {
-      c.width = Math.round(this.w * DPR());
-      c.height = Math.round(this.h * DPR());
+      c.width = cw;
+      c.height = ch;
       c.style.width = `${this.w}px`;
       c.style.height = `${this.h}px`;
     }
@@ -135,6 +176,7 @@ export class Viewport {
 
   viewChanged() {
     this.requestDraw();
+    this.drawCursor();
     this.onViewChange?.(this.view);
   }
 
@@ -171,7 +213,8 @@ export class Viewport {
       this.antsOffset = (this.antsOffset + 1) % 16;
       this.needsOverlay = true;
     }
-    if (this.peers.size && this.frame % 10 === 0) this.needsOverlay = true;
+    if (this.peers.size || this.peerEls.size) this.drawPeers(t);
+    if (!this.cursorEl.hidden) this.drawCursor(); // follows brush size changes from the options
     if (!this.needsDraw && !this.needsOverlay) return;
     if (this.needsDraw) this.draw();
     this.drawOverlay(t);
@@ -336,35 +379,32 @@ export class Viewport {
       ctx.setLineDash([]);
     }
     for (const fn of this.overlays) fn(ctx, this);
-    // friends' cursors
-    const now = performance.now();
-    for (const [id, p] of this.peers) {
-      if (now - p.at > 15000) {
-        this.peers.delete(id);
-        continue;
-      }
-      const s = this.toScreen(p.x, p.y);
+    if (this.toolOverlay) {
       ctx.save();
-      ctx.translate(s.x, s.y);
-      ctx.fillStyle = p.color;
-      ctx.strokeStyle = '#0c0c0d';
+      try {
+        this.toolOverlay(ctx, this);
+      } catch (err) {
+        if (!this.overlayFailed) console.warn(err);
+        this.overlayFailed = true;
+      }
+      ctx.restore();
+    }
+    // friends' selections, in their colors
+    for (const { loops, color } of this.peerSel.values()) {
+      ctx.save();
       ctx.lineWidth = 1.5;
+      ctx.strokeStyle = color;
+      ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(0, 18);
-      ctx.lineTo(5, 13);
-      ctx.lineTo(9, 21);
-      ctx.lineTo(12, 20);
-      ctx.lineTo(8, 12);
-      ctx.lineTo(14, 12);
-      ctx.closePath();
-      ctx.fill();
+      for (const loop of loops) {
+        for (let i = 0; i + 1 < loop.length; i += 2) {
+          const q = this.toScreen(loop[i], loop[i + 1]);
+          if (i) ctx.lineTo(q.x, q.y);
+          else ctx.moveTo(q.x, q.y);
+        }
+        ctx.closePath();
+      }
       ctx.stroke();
-      ctx.font = '600 11px Inter, system-ui, sans-serif';
-      const tw = ctx.measureText(p.name).width;
-      ctx.fillRect(14, 20, tw + 12, 18);
-      ctx.fillStyle = '#0c0c0d';
-      ctx.fillText(p.name, 20, 33);
       ctx.restore();
     }
     this.drawRulers();
@@ -433,18 +473,176 @@ export class Viewport {
     }
   }
 
+  /**
+   * Friends' cursors as elements over the canvas: an arrow and a tag in their color with the
+   * icon of their tool and what they are doing, plus their brush outline. Each glides toward
+   * the latest position it heard of, so a few messages a second still move smoothly.
+   */
+  drawPeers(t) {
+    const now = performance.now();
+    const dt = Math.min(100, t - (this.peerFrame ?? t));
+    this.peerFrame = t;
+    const k = 1 - Math.exp(-dt / 70);
+    for (const [id, p] of this.peers) {
+      if (now - p.at > 60000) this.peers.delete(id);
+    }
+    for (const [id, el] of this.peerEls) {
+      if (!this.peers.has(id) || !this.edoc) {
+        el.remove();
+        this.peerEls.delete(id);
+      }
+    }
+    if (!this.edoc) return;
+    for (const [id, p] of this.peers) {
+      p.x += (p.tx - p.x) * k;
+      p.y += (p.ty - p.y) * k;
+      if (Math.abs(p.tx - p.x) * this.view.zoom < 0.05) p.x = p.tx;
+      if (Math.abs(p.ty - p.y) * this.view.zoom < 0.05) p.y = p.ty;
+      let el = this.peerEls.get(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'peer-cursor';
+        el.dataset.peerCursor = id;
+        el.innerHTML = '<div class="peer-ring"></div><svg class="peer-arrow" width="16" height="22" viewBox="0 0 16 22"><path d="M1 1v17l4.5-4.5 3.5 7.5 3-1.4-3.4-7.3H15z"/></svg><div class="peer-tag"><svg class="ic peer-tool" aria-hidden="true"><use href=""/></svg><b class="peer-name"></b><span class="peer-act"></span></div>';
+        this.peerLayer.append(el);
+        this.peerEls.set(id, el);
+      }
+      const idle = p.active && now - p.active > 30000;
+      const label = idle ? p.idleLabel : p.label || '';
+      const icon = p.icon ? `icons.svg#i-${p.icon}` : '';
+      const ring = p.ring * this.view.zoom;
+      const key = `${p.name}|${p.color}|${icon}|${label}|${Math.round(ring)}|${idle}`;
+      if (el.dataset.key !== key) {
+        el.dataset.key = key;
+        el.style.setProperty('--peer', p.color);
+        el.querySelector('.peer-name').textContent = p.name;
+        el.querySelector('.peer-act').textContent = label;
+        el.querySelector('.peer-act').hidden = !label;
+        const use = el.querySelector('.peer-tool use');
+        use.setAttribute('href', icon);
+        el.querySelector('.peer-tool').style.display = icon ? '' : 'none';
+        el.dataset.tool = p.toolName ?? '';
+        el.classList.toggle('idle', !!idle);
+        const r = el.querySelector('.peer-ring');
+        r.hidden = !(ring >= 4);
+        r.style.width = r.style.height = `${ring}px`;
+      }
+      const s = this.toScreen(p.x, p.y);
+      el.style.transform = `translate(${s.x}px, ${s.y}px)`;
+    }
+  }
+
+  /** Sets the tool cursor: a CSS cursor name, 'eyedropper', or 'brush' for the outline. */
+  setCursor(name) {
+    this.cursorName = name || 'default';
+    this.applyCursor();
+  }
+
+  applyCursor() {
+    const name = this.panning ? 'grabbing' : this.space ? 'grab' : this.cursorName;
+    const brush = name === 'brush' && !!this.edoc;
+    const css = name === 'brush' && !brush ? 'default' : CSS_CURSORS[name] ?? name;
+    if (this.stage.style.cursor !== css) this.stage.style.cursor = css;
+    this.brushCursor = brush;
+    this.drawCursor();
+  }
+
+  /** Places the brush outline (or the precise crosshair) under the pointer. */
+  drawCursor() {
+    const el = this.cursorEl;
+    const at = this.hoverAt;
+    // touch has no hover: the outline shows only while a finger paints
+    if (!this.brushCursor || !this.edoc || !at || (at.type === 'touch' && !at.down) || this.pointers.size > 1) {
+      if (!el.hidden) el.hidden = true;
+      return;
+    }
+    const d = Math.max(0, (this.cursorSize?.() ?? 0) * this.view.zoom);
+    // Caps Lock swaps the outline for a precise crosshair; so does a brush far larger than the view
+    const precise = this.caps || d > 4 * Math.max(this.w, this.h);
+    const key = precise ? 'precise' : String(Math.round(d * 2) / 2);
+    if (key !== this.cursorKey) {
+      this.cursorKey = key;
+      this.buildCursor(precise ? 0 : d, precise);
+    }
+    const t = `translate(${at.sx}px, ${at.sy}px)`;
+    if (el.style.transform !== t) el.style.transform = t;
+    if (el.hidden) el.hidden = false;
+  }
+
+  buildCursor(d, precise) {
+    const el = this.cursorEl;
+    const r = d / 2;
+    const arm = precise ? 9 : 5;
+    const half = Math.ceil(Math.max(r + 2, arm + 3));
+    el.dataset.size = String(Math.round(d * 100) / 100);
+    el.dataset.mode = precise ? 'precise' : 'outline';
+    const svg = document.createElementNS(SVG, 'svg');
+    svg.setAttribute('width', String(half * 2));
+    svg.setAttribute('height', String(half * 2));
+    svg.setAttribute('viewBox', `${-half} ${-half} ${half * 2} ${half * 2}`);
+    svg.style.left = svg.style.top = `${-half}px`;
+    const parts = [];
+    if (!precise && r >= 2) parts.push(['circle', { r: String(r) }]);
+    // a crosshair marks the center of a small brush, and is the whole precise cursor
+    if (precise || d < 12) {
+      const gap = precise ? 2 : 0;
+      parts.push(['path', { d: `M${-arm} 0H${-gap}M${gap} 0H${arm}M0 ${-arm}V${-gap}M0 ${gap}V${arm}` }]);
+    }
+    // a dark band with a light line inside reads on black, white and everything between
+    for (const [stroke, width, opacity] of [
+      ['#000', 3, 0.65],
+      ['#fff', 1, 1],
+    ]) {
+      for (const [tag, attrs] of parts) {
+        const n = document.createElementNS(SVG, tag);
+        for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+        n.setAttribute('fill', 'none');
+        n.setAttribute('stroke', stroke);
+        n.setAttribute('stroke-width', String(width));
+        n.setAttribute('stroke-opacity', String(opacity));
+        svg.append(n);
+      }
+    }
+    el.replaceChildren(svg);
+  }
+
+  /** Remembers where the pointer is, for the cursor element. */
+  track(e, down) {
+    const r = this.stage.getBoundingClientRect();
+    this.hoverAt = { sx: e.clientX - r.left, sy: e.clientY - r.top, type: e.pointerType, down };
+    if (e.getModifierState) this.caps = e.getModifierState('CapsLock');
+    this.drawCursor();
+  }
+
   bind() {
     const st = this.stage;
+    // Caps Lock can change while the pointer rests on the canvas
+    const caps = (e) => {
+      if (!e.getModifierState) return;
+      const on = e.getModifierState('CapsLock');
+      if (on === this.caps) return;
+      this.caps = on;
+      this.drawCursor();
+    };
+    window.addEventListener('keydown', caps);
+    window.addEventListener('keyup', caps);
     st.addEventListener('pointerdown', (e) => this.down(e));
     st.addEventListener('pointermove', (e) => this.move(e));
     st.addEventListener('pointerup', (e) => this.up(e));
     st.addEventListener('pointercancel', (e) => this.up(e, true));
-    st.addEventListener('pointerleave', () => {
+    st.addEventListener('pointerleave', (e) => {
+      if (this.pointers.has(e.pointerId)) return; // captured: the stroke goes on
+      this.hoverAt = null;
+      this.drawCursor();
       this.cursorPos = null;
       this.onCursor?.(null);
       this.needsOverlay = true;
     });
     st.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
+    st.addEventListener('dblclick', (e) => {
+      if (!this.edoc || this.ownEvent(e) || this.space || e.button !== 0) return;
+      this.onDouble?.(this.local(e));
+    });
     st.addEventListener('contextmenu', (e) => e.preventDefault());
     // dragging from a ruler makes a guide
     for (const [c, axis] of [
@@ -501,10 +699,16 @@ export class Viewport {
     return { sx, sy, x: p.x, y: p.y, pressure: e.pointerType === 'pen' ? e.pressure || 0.5 : 1, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey, button: e.button, type: e.pointerType, event: e };
   }
 
+  /** Events on the inline text editor belong to it, not to the tools. */
+  ownEvent(e) {
+    return !!e.target?.closest?.('.text-editor');
+  }
+
   down(e) {
-    if (!this.edoc) return;
+    if (!this.edoc || this.ownEvent(e)) return;
     this.stage.setPointerCapture(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.track(e, true);
     if (this.pointers.size === 2) {
       // a second finger: cancel the tool and start pinch and pan
       this.onTool?.('cancel');
@@ -516,6 +720,7 @@ export class Viewport {
     const p = this.local(e);
     if (e.button === 1 || this.space || this.toolId === 'hand') {
       this.panning = { x: e.clientX, y: e.clientY };
+      this.applyCursor();
       return;
     }
     if (this.toolId === 'zoom') {
@@ -529,6 +734,7 @@ export class Viewport {
 
   move(e) {
     if (!this.edoc) return;
+    this.track(e, this.pointers.has(e.pointerId));
     const p = this.local(e);
     this.cursorPos = { x: p.x, y: p.y };
     this.onCursor?.(p);
@@ -558,12 +764,17 @@ export class Viewport {
 
   up(e, cancel = false) {
     this.pointers.delete(e.pointerId);
+    if (e.pointerType === 'touch' || cancel) {
+      this.hoverAt = null;
+      this.drawCursor();
+    } else this.track(e, false);
     if (this.gesture) {
       if (this.pointers.size < 2) this.gesture = null;
       return;
     }
     if (this.panning) {
       this.panning = null;
+      this.applyCursor();
       return;
     }
     if (this.toolActive) {

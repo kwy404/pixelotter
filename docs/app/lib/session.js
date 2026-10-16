@@ -33,6 +33,51 @@ export function touchedLayers(op, engine) {
   return [];
 }
 
+const HEX = /^#[0-9a-f]{6}$/i;
+const word = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
+
+/**
+ * What a cursor message may carry besides the position: the tool, its brush size in document
+ * pixels, what the person is doing (a short code, with an optional detail such as a filter
+ * name) and the layer they work on. Anything else is dropped, so the messages stay small.
+ */
+export function cleanCursor(from, msg) {
+  const size = Number(msg.size);
+  return {
+    t: 'cursor',
+    from,
+    x: Number(msg.x) || 0,
+    y: Number(msg.y) || 0,
+    view: msg.view && typeof msg.view === 'object' ? { cx: Number(msg.view.cx) || 0, cy: Number(msg.view.cy) || 0, zoom: Number(msg.view.zoom) || 1 } : null,
+    tool: word(msg.tool, 20),
+    size: Number.isFinite(size) ? Math.max(0, Math.min(5000, size)) : 0,
+    act: /^[a-z-]{0,20}$/.test(msg.act ?? '') ? msg.act ?? '' : '',
+    arg: word(msg.arg, 40),
+    layer: word(msg.layer, 40),
+  };
+}
+
+/**
+ * Presence that changes now and then: the selection outline (a few loops of whole document
+ * pixels, at most 800 points in all), the microphone and camera state, and a new name or color.
+ */
+export function cleanPresence(from, msg) {
+  const out = { t: 'presence', from, mic: msg.mic === true, cam: msg.cam === true, sel: null };
+  if (Array.isArray(msg.sel)) {
+    let budget = 800;
+    out.sel = [];
+    for (const loop of msg.sel.slice(0, 16)) {
+      if (!Array.isArray(loop) || budget <= 0) continue;
+      const pts = [];
+      for (let i = 0; i + 1 < loop.length && budget > 0; i += 2, budget--) pts.push(Math.round(Number(loop[i]) || 0), Math.round(Number(loop[i + 1]) || 0));
+      if (pts.length >= 6) out.sel.push(pts);
+    }
+  }
+  if (typeof msg.name === 'string' && msg.name.trim()) out.name = msg.name.trim().slice(0, 40);
+  if (HEX.test(msg.color ?? '')) out.color = msg.color.toLowerCase();
+  return out;
+}
+
 class Base extends Emitter {
   constructor(engine) {
     super();
@@ -53,13 +98,40 @@ class Base extends Emitter {
 }
 
 export class HostSession extends Base {
-  constructor({ engine, name = 'Host', id = 'host' }) {
+  constructor({ engine, name = 'Host', id = 'host', color = null }) {
     super(engine);
     this.id = id;
     this.seq = 0;
     this.ports = new Map(); // guest id -> port
     this.nextGuest = 1;
-    this.peers.set(id, { id, name, color: PEER_COLORS[0], role: 'edit', host: true });
+    this.peers.set(id, { id, name, color: HEX.test(color ?? '') ? color.toLowerCase() : PEER_COLORS[0], role: 'edit', host: true });
+  }
+
+  /** A new name or color, kept when nobody else in the room wears that color. */
+  rename(id, { name, color }) {
+    const p = this.peers.get(id);
+    if (!p) return false;
+    let changed = false;
+    if (name && name !== p.name) {
+      p.name = name;
+      changed = true;
+    }
+    if (color && color !== p.color && ![...this.peers.values()].some((q) => q.id !== id && q.color === color)) {
+      p.color = color;
+      changed = true;
+    }
+    if (changed) {
+      this.broadcast({ t: 'peers', peers: this.peerList() });
+      this.emit('peers', this.peerList());
+    }
+    return changed;
+  }
+
+  /** The host's own presence: a new name or color, the selection, microphone and camera. */
+  presence(msg) {
+    const c = cleanPresence(this.id, msg);
+    this.rename(this.id, c);
+    this.broadcast({ t: 'presence', from: this.id, sel: c.sel, mic: c.mic, cam: c.cam });
   }
 
   get guestCount() {
@@ -197,9 +269,17 @@ export class HostSession extends Base {
         return;
       }
       case 'cursor': {
-        const c = { t: 'cursor', from, x: Number(msg.x) || 0, y: Number(msg.y) || 0, view: msg.view ?? null, tool: String(msg.tool ?? '').slice(0, 20) };
+        const c = cleanCursor(from, msg);
         this.broadcast(c, from);
         this.emit('cursor', c);
+        return;
+      }
+      case 'presence': {
+        const c = cleanPresence(from, msg);
+        this.rename(from, c);
+        const out = { t: 'presence', from, sel: c.sel, mic: c.mic, cam: c.cam };
+        this.broadcast(out, from);
+        this.emit('presence', out);
         return;
       }
       case 'bye':
@@ -209,8 +289,8 @@ export class HostSession extends Base {
     }
   }
 
-  cursor(x, y, view = null, tool = '') {
-    this.broadcast({ t: 'cursor', from: this.id, x, y, view, tool });
+  cursor(x, y, view = null, tool = '', extra = {}) {
+    this.broadcast(cleanCursor(this.id, { x, y, view, tool, ...extra }));
   }
 
   close() {
@@ -249,8 +329,12 @@ export class GuestSession extends Base {
     if (this.ready) this.port.send({ t: 'lock', layers });
   }
 
-  cursor(x, y, view = null, tool = '') {
-    if (this.ready) this.port.send({ t: 'cursor', x, y, view, tool });
+  cursor(x, y, view = null, tool = '', extra = {}) {
+    if (this.ready) this.port.send({ t: 'cursor', x, y, view, tool, ...extra });
+  }
+
+  presence(msg) {
+    if (this.ready) this.port.send({ ...msg, t: 'presence' });
   }
 
   rollback(list) {
@@ -321,6 +405,9 @@ export class GuestSession extends Base {
       }
       case 'cursor':
         this.emit('cursor', msg);
+        return;
+      case 'presence':
+        this.emit('presence', msg);
         return;
       case 'end':
         this.closed = true;

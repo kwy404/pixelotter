@@ -30,6 +30,7 @@
 <link rel="modulepreload" href="js/engine/selection.js">
 <link rel="modulepreload" href="js/engine/text.js">
 <link rel="modulepreload" href="js/files.js">
+<link rel="modulepreload" href="js/help-text.js">
 <link rel="modulepreload" href="js/i18n.js">
 <link rel="modulepreload" href="js/live.js">
 <link rel="modulepreload" href="js/media.js">
@@ -39,6 +40,7 @@
 <link rel="modulepreload" href="js/tools/paint.js">
 <link rel="modulepreload" href="js/tools/select.js">
 <link rel="modulepreload" href="js/tools/transform.js">
+<link rel="modulepreload" href="js/tooltips.js">
 <link rel="modulepreload" href="js/ui-context.js">
 <link rel="modulepreload" href="js/ui-dialogs.js">
 <link rel="modulepreload" href="js/ui-extra.js">
@@ -124,15 +126,15 @@
     <div class="appbar-mid" v-show="S.workspace === 'quick'"><span class="appbar-title">{ S.doc.name || $t('app.name') }</span></div>
     <div class="appbar-end">
       <div class="segmented segmented-sm ws-switch" role="radiogroup" :aria-label="$t('workspace.label')">
-        <label class="segmented-item" :title="$t('workspace.proHint')"><input type="radio" name="ws" value="pro" :checked="S.workspace === 'pro'" @change="setWorkspace('pro')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-pro"/></svg><span class="hide-sm">{ $t('workspace.pro') }</span></label>
-        <label class="segmented-item" :title="$t('workspace.quickHint')"><input type="radio" name="ws" value="quick" :checked="S.workspace === 'quick'" @change="setWorkspace('quick')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-quick"/></svg><span class="hide-sm">{ $t('workspace.quick') }</span></label>
+        <label class="segmented-item" :title="$t('workspace.pro')" :data-tip="$t('tip.ws.pro')"><input type="radio" name="ws" value="pro" :checked="S.workspace === 'pro'" @change="setWorkspace('pro')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-pro"/></svg><span class="hide-sm">{ $t('workspace.pro') }</span></label>
+        <label class="segmented-item" :title="$t('workspace.quick')" :data-tip="$t('tip.ws.quick')"><input type="radio" name="ws" value="quick" :checked="S.workspace === 'quick'" @change="setWorkspace('quick')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-quick"/></svg><span class="hide-sm">{ $t('workspace.quick') }</span></label>
       </div>
       <div class="peers" v-show="S.live.mode === 'host' || S.live.mode === 'guest'">
         <span class="peer-dot" v-for="p in S.live.peers" :key="p.id" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }" :title="p.name">{ p.name.slice(0, 1).toUpperCase() }</span>
       </div>
-      <button type="button" class="btn btn-sm btn-ghost" @click="run('file.share')" :disabled="!S.doc.name" data-action="share"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg><span class="hide-sm">{ S.live.mode === 'off' ? $t('live.share') : $t('live.session') }</span></button>
-      <button type="button" class="btn btn-sm btn-primary" @click="run('file.export')" :disabled="!S.doc.name" data-action="export"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-export"/></svg><span class="hide-sm">{ $t('export.button') }</span></button>
-      <button type="button" class="icon-btn theme-btn" v-theme-toggle.cycle :aria-label="$t('theme.switch')" :title="$t('theme.switch')"><svg class="ic ti-system" aria-hidden="true"><use href="icons.svg#i-aperture"/></svg><svg class="ic ti-light" aria-hidden="true"><use href="icons.svg#i-sparkle"/></svg><svg class="ic ti-dark" aria-hidden="true"><use href="icons.svg#i-proof"/></svg></button>
+      <button type="button" class="btn btn-sm btn-ghost" @click="run('file.share')" :disabled="!S.doc.name" data-action="share" :title="$t('cmd.file.share')" :data-tip="$t('tip.share')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg><span class="hide-sm">{ S.live.mode === 'off' ? $t('live.share') : $t('live.session') }</span></button>
+      <button type="button" class="btn btn-sm btn-primary" @click="run('file.export')" :disabled="!S.doc.name" data-action="export" :title="$t('export.button')" :data-tip="$t('tip.export')" data-tip-key="Ctrl+Shift+E"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-export"/></svg><span class="hide-sm">{ $t('export.button') }</span></button>
+      <button type="button" class="icon-btn theme-btn" v-theme-toggle.cycle :aria-label="$t('theme.switch')" :title="$t('theme.switch')" :data-tip="$t('tip.theme')"><svg class="ic ti-system" aria-hidden="true"><use href="icons.svg#i-aperture"/></svg><svg class="ic ti-light" aria-hidden="true"><use href="icons.svg#i-sparkle"/></svg><svg class="ic ti-dark" aria-hidden="true"><use href="icons.svg#i-proof"/></svg></button>
     </div>
     <!-- open menu -->
     <div class="menu-pop" v-show="S.menuOpen !== null" :style="{ left: S.menuX + 'px' }" role="menu" @mouseleave="leaveMenu()">
@@ -192,7 +194,10 @@
     <div class="opt-group" v-show="S.tool === 'text'">
       <label class="opt"><select class="select select-xs" v-model="S.options.text.font" @change="textOpt('font')" :aria-label="$t('opt.font')"><option v-for="f in S.fonts" :key="f" :value="f">{ f }</option></select></label>
       <label class="opt"><select class="select select-xs" v-model.number="S.options.text.weight" @change="textOpt('weight')" :aria-label="$t('opt.weight')"><option v-for="w in [400,500,600,700,800,900]" :key="w" :value="w">{ w }</option></select></label>
-      <label class="opt"><input class="num" type="number" min="4" max="2000" v-model.number="S.options.text.size" @change="textOpt('size')" :aria-label="$t('opt.size')">px</label>
+      <label class="opt"><input class="num" type="number" min="4" max="2000" v-model.number="S.options.text.size" @input="textOpt('size')" :aria-label="$t('opt.size')" data-field="text-size">px</label>
+      <label class="opt"><input type="color" .value="S.options.text.color || S.colors.fg" @input="S.options.text.color = $event.target.value; textOpt('color')" :aria-label="$t('opt.textColor')" :title="$t('opt.textColor')" data-field="text-color"></label>
+      <button type="button" class="icon-btn sm text-style" :class="{ on: S.options.text.weight >= 600 }" :aria-pressed="S.options.text.weight >= 600 ? 'true' : 'false'" @click="S.options.text.weight = S.options.text.weight >= 600 ? 400 : 700; textOpt('weight')" :aria-label="$t('opt.bold')" :title="$t('opt.bold')" data-tip-key="Ctrl+B"><b>B</b></button>
+      <button type="button" class="icon-btn sm text-style" :class="{ on: S.options.text.italic }" :aria-pressed="S.options.text.italic ? 'true' : 'false'" @click="S.options.text.italic = !S.options.text.italic; textOpt('italic')" :aria-label="$t('opt.italic')" :title="$t('opt.italic')" data-tip-key="Ctrl+I"><i>I</i></button>
       <div class="segmented segmented-xs" role="radiogroup" :aria-label="$t('opt.align')"><label class="segmented-item" v-for="a in ['left','center','right']" :key="a"><input type="radio" name="talign" :value="a" :checked="S.options.text.align === a" @change="S.options.text.align = a; textOpt('align')">{ $t('align.' + a) }</label></div>
       <label class="opt"><span>{ $t('opt.preset') }</span><select class="select select-xs" v-model="S.options.text.preset" @change="textOpt('preset')"><option value="">{ $t('opt.none') }</option><option v-for="p in S.textPresets" :key="p.id" :value="p.id">{ $t('preset.' + p.id) }</option></select></label>
     </div>
@@ -230,6 +235,7 @@
       <button type="button" class="btn btn-xs btn-ghost" @click="run('view.actual')">100%</button>
     </div>
     <span class="opt-spacer"></span>
+    <span class="opt-desc" data-field="tool-desc">{ $t('tip.tool.' + S.tool) }</span>
     <span class="opt-edit-mask" v-show="S.maskEdit"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-mask"/></svg>{ $t('layers.editingMask') }</span>
   </div>
 
@@ -237,13 +243,13 @@
     <!-- Tools panel -->
     <nav class="toolbox" v-show="S.workspace === 'pro' && S.screen === 'editor'" :aria-label="$t('tools.label')">
       <div class="tool-group" v-for="g in S.toolGroups" :key="g.id" :class="{ active: g.tools.includes(S.tool) }">
-        <button type="button" class="tool-btn" :class="{ active: g.tools.includes(S.tool) }" @click="pickGroup(g)" @contextmenu.prevent="flyout(g, $el)" @pointerdown="holdStart(g, $el)" @pointerup="holdEnd()" :title="$t('tool.' + g.current) + ' (' + g.key.toUpperCase() + ')'" :aria-label="$t('tool.' + g.current)" :data-tool="g.current" :aria-pressed="g.tools.includes(S.tool) ? 'true' : 'false'"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(g.current)"/></svg><span class="tool-tri" v-show="g.tools.length > 1" aria-hidden="true"></span></button>
+        <button type="button" class="tool-btn" :class="{ active: g.tools.includes(S.tool) }" @click="pickGroup(g)" @contextmenu.prevent="flyout(g, $el)" @pointerdown="holdStart(g, $el)" @pointerup="holdEnd()" :aria-label="$t('tool.' + g.current) + ' (' + g.key.toUpperCase() + ')'" :data-tool="g.current" :aria-pressed="g.tools.includes(S.tool) ? 'true' : 'false'"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(g.current)"/></svg><span class="tool-tri" v-show="g.tools.length > 1" aria-hidden="true"></span></button>
       </div>
-      <div class="swatch-pair" :title="$t('colors.hint')">
-        <button type="button" class="swatch fg" :style="{ background: S.colors.fg }" @click="pickColor('fg')" :aria-label="$t('colors.fg')"></button>
-        <button type="button" class="swatch bg" :style="{ background: S.colors.bg }" @click="pickColor('bg')" :aria-label="$t('colors.bg')"></button>
-        <button type="button" class="swatch-swap" @click="swapColors()" :aria-label="$t('colors.swap')" :title="$t('colors.swap') + ' (X)'"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-flip"/></svg></button>
-        <button type="button" class="swatch-reset" @click="resetColors()" :aria-label="$t('colors.reset')" :title="$t('colors.reset') + ' (D)'"></button>
+      <div class="swatch-pair">
+        <button type="button" class="swatch fg" :style="{ background: S.colors.fg }" @click="pickColor('fg')" :aria-label="$t('colors.fg')" :data-tip="$t('tip.colors.fg')"></button>
+        <button type="button" class="swatch bg" :style="{ background: S.colors.bg }" @click="pickColor('bg')" :aria-label="$t('colors.bg')" :data-tip="$t('tip.colors.bg')"></button>
+        <button type="button" class="swatch-swap" @click="swapColors()" :aria-label="$t('colors.swap')" :title="$t('colors.swap')" :data-tip="$t('tip.colors.swap')" data-tip-key="X"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-flip"/></svg></button>
+        <button type="button" class="swatch-reset" @click="resetColors()" :aria-label="$t('colors.reset')" :title="$t('colors.reset')" :data-tip="$t('tip.colors.reset')" data-tip-key="D"></button>
       </div>
     </nav>
     <div class="flyout" v-show="S.flyout" :style="{ top: S.flyoutY + 'px', left: S.flyoutX + 'px' }" role="menu" @mouseleave="S.flyout = null">
@@ -253,7 +259,7 @@
     <!-- Quick workspace side -->
     <aside class="quick" v-show="S.workspace === 'quick' && S.screen === 'editor'" :aria-label="$t('workspace.quick')">
       <div class="quick-tabs" role="tablist">
-        <button type="button" role="tab" class="quick-tab" v-for="q in ['looks','adjust','cutout','sticker','text','shapes','size']" :key="q" :class="{ active: S.quickTab === q }" :aria-selected="S.quickTab === q ? 'true' : 'false'" @click="S.quickTab = q" :data-quick="q"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + quickIcon(q)"/></svg><span>{ $t('quick.' + q) }</span></button>
+        <button type="button" role="tab" class="quick-tab" v-for="q in ['looks','adjust','cutout','sticker','text','shapes','size']" :key="q" :class="{ active: S.quickTab === q }" :aria-selected="S.quickTab === q ? 'true' : 'false'" @click="S.quickTab = q" :data-quick="q" :title="$t('quick.' + q)" :data-tip="$t('tip.quick.' + q)"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + quickIcon(q)"/></svg><span>{ $t('quick.' + q) }</span></button>
       </div>
       <div class="quick-body">
         <div v-show="S.quickTab === 'looks'">
@@ -327,6 +333,7 @@
         <span class="st hide-sm" v-show="S.status.x !== null">X { S.status.x } Y { S.status.y }</span>
         <span class="st hide-sm" v-show="S.status.rgb">{ S.status.rgb }</span>
         <span class="st hide-sm" v-show="S.status.cmyk && S.doc.mode === 'cmyk'">{ S.status.cmyk }</span>
+        <span class="st hint hide-sm" v-show="S.workspace === 'pro' && !S.status.message" data-field="tool-hint">{ $t('hint.tool.' + S.tool) }</span>
         <span class="st msg" role="status">{ S.status.message }</span>
         <span class="st-spacer"></span>
         <span class="st hide-sm" v-show="S.view.proof || S.doc.mode !== 'rgb'"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-proof"/></svg>{ $t('status.proof') }</span>
@@ -349,6 +356,7 @@
             <button type="button" class="home-card" @click="openSample('otter-desk')" data-action="sample"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-image"/></svg><b>{ $t('home.sample') }</b><small>{ $t('home.sampleHint') }</small></button>
             <button type="button" class="home-card" @click="run('file.join')" data-action="join"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-words"/></svg><b>{ $t('home.join') }</b><small>{ $t('home.joinHint') }</small></button>
           </div>
+          <p class="home-drop"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-download"/></svg>{ $t('home.drop') }</p>
           <h2 class="home-h">{ $t('home.templates') }</h2>
           <div class="tpl-grid">
             <button type="button" class="tpl" v-for="tp in S.templates" :key="tp.id" @click="newFromTemplate(tp)" :data-template="tp.id"><span class="tpl-box" :style="{ aspectRatio: tp.w + ' / ' + tp.h }"></span><b>{ $t('template.' + tp.id) }</b><small>{ tp.w } x { tp.h }</small></button>
@@ -413,11 +421,11 @@
             <div v-if="S.active">
               <p class="props-title"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + layerIcon(S.active.type)"/></svg>{ S.active.name }</p>
               <div class="prop-grid" v-show="!['group','adjust','fill'].includes(S.active.type)">
-                <label>X<input class="input input-xs num" type="number" .value="Math.round(S.active.x)" @change="setProp('x', +$event.target.value)"></label>
-                <label>Y<input class="input input-xs num" type="number" .value="Math.round(S.active.y)" @change="setProp('y', +$event.target.value)"></label>
-                <label>{ $t('props.w') }<input class="input input-xs num" type="number" .value="Math.round(S.active.size.w * Math.abs(S.active.scaleX))" @change="setSize('w', +$event.target.value)"></label>
-                <label>{ $t('props.h') }<input class="input input-xs num" type="number" .value="Math.round(S.active.size.h * Math.abs(S.active.scaleY))" @change="setSize('h', +$event.target.value)"></label>
-                <label>{ $t('props.angle') }<input class="input input-xs num" type="number" step="0.1" .value="S.active.rotation" @change="setProp('rotation', +$event.target.value)"></label>
+                <label :title="$t('tip.prop.x')">X<input class="input input-xs num" type="number" :aria-label="$t('tip.prop.x')" .value="Math.round(S.active.x)" @change="setProp('x', +$event.target.value)"></label>
+                <label :title="$t('tip.prop.y')">Y<input class="input input-xs num" type="number" :aria-label="$t('tip.prop.y')" .value="Math.round(S.active.y)" @change="setProp('y', +$event.target.value)"></label>
+                <label :title="$t('tip.prop.w')">{ $t('props.w') }<input class="input input-xs num" type="number" :aria-label="$t('tip.prop.w')" .value="Math.round(S.active.size.w * Math.abs(S.active.scaleX))" @change="setSize('w', +$event.target.value)"></label>
+                <label :title="$t('tip.prop.h')">{ $t('props.h') }<input class="input input-xs num" type="number" :aria-label="$t('tip.prop.h')" .value="Math.round(S.active.size.h * Math.abs(S.active.scaleY))" @change="setSize('h', +$event.target.value)"></label>
+                <label class="wide" :title="$t('tip.prop.angle')">{ $t('props.angle') }<input class="input input-xs num" type="number" step="0.1" :aria-label="$t('tip.prop.angle')" .value="S.active.rotation" @change="setProp('rotation', +$event.target.value)"></label>
               </div>
               <!-- text -->
               <div v-if="S.active.type === 'text'" class="prop-stack">
@@ -466,24 +474,24 @@
           <!-- Layers -->
           <div v-if="g.active === 'layers'" class="p-layers">
             <div class="layer-controls" v-show="S.active">
-              <select class="select select-xs blend" .value="S.active ? S.active.blend : 'normal'" @change="setProp('blend', $event.target.value)" :aria-label="$t('layers.blend')" data-control="blend"><option v-for="b in S.blendModes" :key="b" :value="b">{ $t('blend.' + b) }</option></select>
-              <label class="mini">{ $t('layers.opacity') }<input class="num" type="number" min="0" max="100" .value="S.active ? Math.round(S.active.opacity * 100) : 100" @change="setProp('opacity', $event.target.value / 100)" data-control="opacity">%</label>
-              <label class="mini">{ $t('layers.fill') }<input class="num" type="number" min="0" max="100" .value="S.active ? Math.round(S.active.fill * 100) : 100" @change="setProp('fill', $event.target.value / 100)">%</label>
+              <select class="select select-xs blend" .value="S.active ? S.active.blend : 'normal'" @change="setProp('blend', $event.target.value)" :aria-label="$t('layers.blend')" :data-tip="$t('tip.layer.blend')" data-control="blend"><option v-for="b in S.blendModes" :key="b" :value="b" :selected="(S.active ? S.active.blend : 'normal') === b">{ $t('blend.' + b) }</option></select>
+              <label class="mini" :title="$t('layers.opacity')" :data-tip="$t('tip.layer.opacity')">{ $t('layers.opacity') }<input class="num" type="number" min="0" max="100" .value="S.active ? Math.round(S.active.opacity * 100) : 100" @change="setProp('opacity', $event.target.value / 100)" data-control="opacity">%</label>
+              <label class="mini" :title="$t('layers.fill')" :data-tip="$t('tip.layer.fill')">{ $t('layers.fill') }<input class="num" type="number" min="0" max="100" .value="S.active ? Math.round(S.active.fill * 100) : 100" @change="setProp('fill', $event.target.value / 100)">%</label>
             </div>
             <ul class="layer-list" role="listbox" :aria-label="$t('panel.layers')" @dragover.prevent @drop.prevent="dropLayer($event, null)">
-              <li class="layer-row" v-for="l in S.layers" :key="l.id" :class="{ active: l.active, 'is-hidden': !l.visible, held: l.holder }" :style="{ paddingLeft: (8 + l.depth * 14) + 'px' }" role="option" :aria-selected="l.active ? 'true' : 'false'" draggable="true" @dragstart="dragLayer($event, l.id)" @dragover.prevent @drop.prevent.stop="dropLayer($event, l.id)" @click="selectLayer(l.id)" @dblclick="renameLayerInline(l.id)" :data-layer="l.id">
-                <button type="button" class="eye" @click.stop="toggleVisible(l.id)" :aria-label="l.visible ? $t('layers.hide') : $t('layers.show')"><svg class="ic" aria-hidden="true"><use :href="l.visible ? 'icons.svg#i-eye' : 'icons.svg#i-eye-off'"/></svg></button>
+              <li class="layer-row" v-for="l in S.layers" :key="l.id" :class="{ active: l.active, 'is-hidden': !l.visible, 'is-locked': l.locked, held: l.holder }" :style="{ paddingLeft: (8 + l.depth * 14) + 'px' }" role="option" :aria-selected="l.active ? 'true' : 'false'" draggable="true" @dragstart="dragLayer($event, l.id)" @dragover.prevent @drop.prevent.stop="dropLayer($event, l.id)" @click="selectLayer(l.id)" @dblclick="renameLayerInline(l.id)" :data-layer="l.id">
+                <button type="button" class="eye" @click.stop="toggleVisible(l.id)" :aria-label="l.visible ? $t('layers.hide') : $t('layers.show')" :data-tip="$t('tip.layer.eye')"><svg class="ic" aria-hidden="true"><use :href="l.visible ? 'icons.svg#i-eye' : 'icons.svg#i-eye-off'"/></svg></button>
                 <button type="button" class="twist" v-show="l.type === 'group'" @click.stop="toggleCollapse(l.id)" :aria-label="$t('layers.toggleGroup')"><svg class="ic" aria-hidden="true"><use :href="l.collapsed ? 'icons.svg#i-chevron-right' : 'icons.svg#i-chevron-down'"/></svg></button>
                 <span class="clip-mark" v-show="l.clip" aria-hidden="true"></span>
-                <span class="thumb" :class="{ 'is-mask-off': l.maskActive }"><img v-show="l.thumb" :src="l.thumb" alt=""><svg class="ic" v-show="!l.thumb" aria-hidden="true"><use :href="'icons.svg#i-' + layerIcon(l.type)"/></svg></span>
-                <span class="thumb mask" v-show="l.hasMask" :class="{ active: l.maskActive, off: !l.maskEnabled }" @click.stop="editMask(l.id)" :title="$t('layers.mask')"><img :src="l.maskThumb" alt=""></span>
+                <span class="thumb" :class="{ 'is-mask-off': l.maskActive, 'is-text': l.type === 'text' }" @dblclick.stop="editLayerContent(l.id)" :title="l.type === 'text' ? $t('layers.editText') : ''"><img v-show="l.thumb && l.type !== 'text'" :src="l.thumb" alt=""><b class="thumb-t" v-show="l.type === 'text'" aria-hidden="true">T</b><svg class="ic" v-show="!l.thumb && l.type !== 'text'" aria-hidden="true"><use :href="'icons.svg#i-' + layerIcon(l.type)"/></svg></span>
+                <span class="thumb mask" v-show="l.hasMask" :class="{ active: l.maskActive, off: !l.maskEnabled }" @click.stop="editMask(l.id)" :title="$t('layers.mask')" :data-tip="$t('tip.layer.mask')"><img :src="l.maskThumb" alt=""></span>
                 <span class="layer-name">{ l.name }</span>
-                <span class="holder" v-show="l.holder" :style="{ background: l.holder ? l.holder.color : '' }" :title="l.holder ? $t('layers.heldBy', { name: l.holder.name }) : ''">{ l.holder ? l.holder.name.slice(0, 1) : '' }</span>
+                <span class="layer-editors" v-show="l.editors && l.editors.length"><span class="peer-mini" v-for="e in (l.editors || [])" :key="e.id" :style="{ background: e.color }" :title="$t('presence.editing', { name: e.name })" :data-editor="e.id">{ e.name.slice(0, 1).toUpperCase() }</span></span><span class="holder" v-show="l.holder" :style="{ background: l.holder ? l.holder.color : '' }" :title="l.holder ? $t('layers.heldBy', { name: l.holder.name }) : ''">{ l.holder ? l.holder.name.slice(0, 1) : '' }</span>
                 <svg class="ic fx" v-show="l.styled" aria-hidden="true"><use href="icons.svg#i-fx"/></svg>
-                <button type="button" class="lock" @click.stop="toggleLock(l.id)" :aria-label="l.locked ? $t('layers.unlock') : $t('layers.lock')"><svg class="ic" aria-hidden="true"><use :href="l.locked ? 'icons.svg#i-lock' : 'icons.svg#i-unlock'"/></svg></button>
+                <button type="button" class="lock" @click.stop="toggleLock(l.id)" :aria-label="l.locked ? $t('layers.unlock') : $t('layers.lock')" :data-tip="$t('tip.layer.lock')"><svg class="ic" aria-hidden="true"><use :href="l.locked ? 'icons.svg#i-lock' : 'icons.svg#i-unlock'"/></svg></button>
               </li>
             </ul>
-            <p class="panel-empty" v-show="!S.layers.length">{ $t('layers.empty') }</p>
+            <div class="panel-empty" v-show="!S.layers.length"><p>{ $t('layers.empty') } { $t('layers.emptyHint') }</p><button type="button" class="btn btn-xs btn-soft" @click="run('layer.new')" data-action="empty-new-layer">{ $t('layers.create') }</button></div>
             <footer class="layer-foot">
               <button type="button" class="icon-btn sm" @click="run('layer.style')" :title="$t('cmd.layer.style')" :aria-label="$t('cmd.layer.style')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg></button>
               <button type="button" class="icon-btn sm" @click="run('layer.addMask', 'auto')" :title="$t('cmd.layer.addMask')" :aria-label="$t('cmd.layer.addMask')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-mask"/></svg></button>
@@ -542,8 +550,10 @@
                 <button type="button" class="tab" v-for="lt in ['people','chat','call']" :key="lt" :class="{ 'tab-active': S.liveTab === lt }" @click="S.liveTab = lt; lt === 'chat' && (S.live.unread = 0)">{ $t('live.' + lt) }</button>
               </div>
               <ul class="people" v-show="S.liveTab === 'people'">
-                <li v-for="p in S.live.peers" :key="p.id" :data-peer="p.id" tabindex="0"><span class="peer-dot" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }">{ p.name.slice(0, 1).toUpperCase() }</span><b>{ p.name }{ p.me ? ' (' + $t('live.you') + ')' : '' }</b><small>{ p.host ? $t('live.owner') : $t('live.role.' + p.role) }</small>
-                  <button type="button" class="btn btn-xs btn-ghost" v-show="!p.me" @click="followPeer(p.id)">{ S.live.follow === p.id ? $t('live.unfollow') : $t('live.follow') }</button>
+                <li v-for="p in S.live.peers" :key="p.id" :data-peer="p.id" tabindex="0"><span class="peer-dot" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }">{ p.name.slice(0, 1).toUpperCase() }</span><b>{ p.name }{ p.me ? ' (' + $t('live.you') + ')' : '' }</b><small>{ p.host ? $t('live.owner') : $t('live.role.' + p.role) }</small><span class="peer-media"><svg class="ic" :class="{ on: p.mic }" :aria-label="p.mic ? $t('presence.micOn') : $t('presence.micOff')" role="img"><use href="icons.svg#i-mic"/></svg><svg class="ic" :class="{ on: p.cam }" :aria-label="p.cam ? $t('presence.camOn') : $t('presence.camOff')" role="img"><use href="icons.svg#i-camera"/></svg></span>
+                  <span class="peer-doing" :data-peer-doing="p.id"><svg class="ic" v-show="p.tool" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(p.tool || 'move')"/></svg><span>{ p.toolName }</span><span v-show="p.layerName">{ $t('presence.onLayer', { name: p.layerName }) }</span><em v-show="p.doing">{ p.doing }</em></span>
+                  <button type="button" class="btn btn-xs btn-ghost" v-show="!p.me" @click="followPeer(p.id)" :data-tip="$t('presence.followHint')">{ S.live.follow === p.id ? $t('live.unfollow') : $t('live.follow') }</button>
+                  <button type="button" class="btn btn-xs btn-ghost" v-show="!p.me" @click="goToPeer(p.id)" :data-tip="$t('presence.goToHint')">{ $t('presence.goTo') }</button>
                   <select class="select select-xs" v-show="S.live.mode === 'host' && !p.host" .value="p.role" @change="setRole(p.id, $event.target.value)" :aria-label="$t('live.roleLabel')"><option value="edit">{ $t('live.role.edit') }</option><option value="view">{ $t('live.role.view') }</option></select>
                   <details class="safety" v-show="p.safety"><summary>{ $t('live.safety') }</summary><code class="mono" :data-peer="p.id">{ p.safety }</code><small>{ $t('live.safetyHint') }</small></details>
                 </li>

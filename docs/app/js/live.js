@@ -7,7 +7,10 @@
 //     follow mode, per layer locks and view only or edit roles;
 //   * talking: chat with replies, reactions and pasted images, voice with noise suppression,
 //     cameras and screen sharing, in a full mesh (guests reach each other through the host);
-//   * sending a copy: one file, untouched, verified with SHA-256.
+//   * sending a copy: one file, untouched, verified with SHA-256;
+//   * presence: each person's cursor moves smoothly with a name tag in their color, the icon
+//     of their tool with the brush size, what they are doing and their selection; the people
+//     panel lists tool, layer, microphone and camera, with follow and go to cursor.
 
 import { Emitter } from '../lib/emitter.js';
 import { CodeCreator, CodeJoiner, RoomCreator, CODE_LIFETIME_MS } from '../lib/pairing.js';
@@ -274,6 +277,39 @@ class Join extends Emitter {
   }
 }
 
+/** What a tool is doing while its button is down, for the people around. */
+const ACTS = {
+  brush: 'painting',
+  pencil: 'painting',
+  eraser: 'erasing',
+  clone: 'retouching',
+  heal: 'retouching',
+  'spot-heal': 'retouching',
+  patch: 'retouching',
+  blur: 'retouching',
+  sharpen: 'retouching',
+  smudge: 'retouching',
+  dodge: 'retouching',
+  burn: 'retouching',
+  sponge: 'retouching',
+  marquee: 'selecting',
+  'marquee-ellipse': 'selecting',
+  lasso: 'selecting',
+  'lasso-poly': 'selecting',
+  'quick-select': 'selecting',
+  wand: 'selecting',
+  move: 'moving',
+  crop: 'cropping',
+  text: 'typing',
+  shape: 'drawing',
+  pen: 'drawing',
+  gradient: 'filling',
+  bucket: 'filling',
+  eyedropper: 'picking',
+};
+const CURSOR_MS = 40; // about 25 cursor messages a second at most
+const IDLE_MS = 30000;
+
 export class Live extends Emitter {
   constructor(app, ui) {
     super();
@@ -288,6 +324,11 @@ export class Live extends Emitter {
     this.chat = [];
     this.cursorAt = 0;
     this.follow = null;
+    this.lastPos = null; // where my pointer last was, in document pixels
+    this.sentKey = '';
+    this.presenceKey = '';
+    this.presence = new Map(); // peer id -> { tool, size, act, arg, layer, mic, cam, at, active }
+    this.peopleKey = '';
     this.call = new CallManager(app.S.settings.call);
     this.call.on('change', () => this.syncCall());
     this.call.on('speaking', () => this.syncCall());
@@ -355,7 +396,7 @@ export class Live extends Emitter {
     if (!edoc || this.mode !== 'off') return;
     this.mode = 'host';
     this.edoc = edoc;
-    const hs = new HostSession({ engine: edoc, name: this.name, id: 'host' });
+    const hs = new HostSession({ engine: edoc, name: this.name, id: 'host', color: this.S.settings.color });
     this.session = hs;
     this.myId = 'host';
     edoc.session = {
@@ -369,6 +410,8 @@ export class Live extends Emitter {
     hs.on('peers', (p) => this.syncPeers(p));
     hs.on('locks', () => app.syncLayers());
     hs.on('cursor', (c) => this.showCursor(c));
+    hs.on('presence', (p) => this.showPresence(p));
+    this.startPresence();
     this.set({ mode: 'host', step: 'idle', peers: hs.peerList(), me: 'host' });
     app.syncTabs();
     await this.openRoom();
@@ -520,6 +563,9 @@ export class Live extends Emitter {
       edoc.name = edoc.doc.name;
       this.set({ mode: 'guest', step: 'live', me: gs.id });
       app.toast(app.t('live.welcome', { name: hostName }), 'success');
+      // my color and name as I chose them (the host keeps them when nobody else has that color)
+      gs.presence({ name: this.name, color: this.S.settings.color, ...this.localPresence() });
+      this.startPresence();
     });
     gs.on('peers', (p) => {
       this.syncPeers(p);
@@ -527,6 +573,7 @@ export class Live extends Emitter {
     });
     gs.on('locks', () => app.syncLayers());
     gs.on('cursor', (c) => this.showCursor(c));
+    gs.on('presence', (p) => this.showPresence(p));
     gs.on('rejected', ({ reason }) => app.toast(app.t(`live.refused.${reason}`), 'warning'));
     gs.on('end', () => this.ended());
     gs.on('remote', () => app.syncLayers());
@@ -585,8 +632,54 @@ export class Live extends Emitter {
 
   syncPeers(list) {
     this.peers = list;
-    this.set({ peers: list.map((p) => ({ ...p, me: p.id === this.myId, safety: (this.safety.get(p.id) ?? []).join(' ') })) });
+    for (const p of list) {
+      const v = this.app.vp.peers.get(p.id);
+      if (v) Object.assign(v, { name: p.name, color: p.color });
+    }
+    this.refreshPeople(true);
     this.app.syncLayers();
+  }
+
+  /** The people list with what each person is doing, refreshed when something changed. */
+  refreshPeople(force = false) {
+    const app = this.app;
+    const now = performance.now();
+    const rows = this.peers.map((p) => {
+      const me = p.id === this.myId;
+      const pr = me ? { ...this.activity(), mic: this.S.call.inCall && !this.S.call.muted, cam: !!this.S.call.camera, active: now } : this.presence.get(p.id) ?? {};
+      const layer = pr.layer ? app.edoc?.layer(pr.layer) : null;
+      const idle = !me && pr.active && now - pr.active > IDLE_MS;
+      return {
+        ...p,
+        me,
+        safety: (this.safety.get(p.id) ?? []).join(' '),
+        tool: pr.tool || (me ? app.toolId : ''),
+        toolName: pr.tool || me ? app.t(`tool.${pr.tool || app.toolId}`) : '',
+        layerName: layer?.name ?? '',
+        doing: idle ? app.t('presence.idle') : this.actLabel(pr.act, pr.arg),
+        idle: !!idle,
+        mic: !!pr.mic,
+        cam: !!pr.cam,
+      };
+    });
+    const key = JSON.stringify(rows);
+    if (!force && key === this.peopleKey) return;
+    this.peopleKey = key;
+    this.set({ peers: rows });
+  }
+
+  actLabel(act, arg = '') {
+    return act ? this.app.t(`presence.${act}`, { name: arg }) : '';
+  }
+
+  /** The layers friends work on: layer id -> [{ id, name, color }]. */
+  editorsOf(layerId) {
+    const out = [];
+    for (const p of this.peers) {
+      if (p.id === this.myId) continue;
+      if (this.presence.get(p.id)?.layer === layerId) out.push({ id: p.id, name: p.name, color: p.color });
+    }
+    return out;
   }
 
   peerMap() {
@@ -601,28 +694,114 @@ export class Live extends Emitter {
     return this.myId;
   }
 
+  /** What I am doing right now: tool, brush size, activity and the layer I work on. */
+  activity() {
+    const app = this.app;
+    let act = '';
+    let arg = '';
+    if (app.textEditor?.isOpen?.()) act = 'typing';
+    else if (document.querySelector('#dlg-filter[open]')) {
+      act = 'filter';
+      arg = this.S.dlg.filter?.title ?? '';
+    } else if (app.vp.toolActive) act = ACTS[app.toolId] ?? '';
+    const size = Number(app.opts(app.toolId).size) || 0;
+    return { tool: app.toolId, size, act, arg, layer: app.edoc?.active ?? '' };
+  }
+
+  /** Selection outline (whole pixels), microphone and camera, for the presence message. */
+  localPresence() {
+    const sel = this.app.edoc?.selection;
+    let loops = null;
+    if (sel && !sel.empty) {
+      const all = sel.outlines();
+      const total = all.reduce((n, l) => n + l.length, 0);
+      const step = Math.max(1, Math.ceil(total / 700));
+      loops = all.slice(0, 16).map((l) => l.filter((_, i) => i % step === 0).flatMap(([x, y]) => [Math.round(x), Math.round(y)])).filter((l) => l.length >= 6);
+    }
+    return { sel: loops, mic: this.S.call.inCall && !this.S.call.muted, cam: !!this.S.call.camera };
+  }
+
   cursor(x, y) {
+    this.lastPos = { x, y };
+    this.sendCursor(false);
+  }
+
+  sendCursor(force) {
     const now = performance.now();
-    if (!this.session || now - this.cursorAt < 50) return;
+    if (!this.session || !this.lastPos || (!force && now - this.cursorAt < CURSOR_MS)) return;
     this.cursorAt = now;
     const v = this.app.vp.view;
-    this.session.cursor(x, y, { cx: v.cx, cy: v.cy, zoom: v.zoom }, this.app.toolId);
+    const a = this.activity();
+    this.sentKey = `${a.tool}|${a.size}|${a.act}|${a.arg}|${a.layer}`;
+    this.session.cursor(this.lastPos.x, this.lastPos.y, { cx: v.cx, cy: v.cy, zoom: v.zoom }, a.tool, { size: a.size, act: a.act, arg: a.arg, layer: a.layer });
+  }
+
+  /** A few times a second: tell friends when my tool, activity, layer or selection changed. */
+  startPresence() {
+    clearInterval(this.presenceTimer);
+    let beat = 0;
+    this.presenceTimer = setInterval(() => {
+      if (!this.session || (this.mode !== 'host' && this.mode !== 'guest')) return;
+      const a = this.activity();
+      const key = `${a.tool}|${a.size}|${a.act}|${a.arg}|${a.layer}`;
+      // the position is only known once the pointer was over the canvas
+      this.lastPos ??= { x: (this.app.edoc?.doc.width ?? 0) / 2, y: (this.app.edoc?.doc.height ?? 0) / 2 };
+      if (key !== this.sentKey || ++beat % 20 === 0) this.sendCursor(true);
+      const pr = this.localPresence();
+      const pkey = JSON.stringify(pr);
+      if (pkey !== this.presenceKey) {
+        this.presenceKey = pkey;
+        this.session.presence?.(pr);
+      }
+      this.refreshPeople();
+    }, 250);
   }
 
   showCursor(c) {
     const p = this.peers.find((x) => x.id === c.from);
     if (!p || this.app.edoc !== this.edoc) return;
-    this.app.vp.peers.set(c.from, { x: c.x, y: c.y, name: p.name, color: p.color, at: performance.now() });
-    this.app.vp.needsOverlay = true;
+    const app = this.app;
+    const now = performance.now();
+    const vp = app.vp;
+    const prev = this.presence.get(c.from);
+    const moved = !prev || prev.x !== c.x || prev.y !== c.y || prev.act !== c.act || prev.tool !== c.tool;
+    const pr = { ...(prev ?? {}), x: c.x, y: c.y, tool: c.tool ?? '', size: c.size ?? 0, act: c.act ?? '', arg: c.arg ?? '', layer: c.layer ?? '', at: now, active: moved || c.act ? now : prev?.active ?? now };
+    this.presence.set(c.from, pr);
+    const ring = ['brush', 'pencil', 'eraser'].includes(pr.tool) ? pr.size : 0;
+    const v = vp.peers.get(c.from);
+    const info = { tx: c.x, ty: c.y, name: p.name, color: p.color, icon: app.tools.get(pr.tool)?.icon ?? '', toolName: pr.tool ? app.t(`tool.${pr.tool}`) : '', label: this.actLabel(pr.act, pr.arg), idleLabel: app.t('presence.idle'), ring, active: pr.active, at: now };
+    if (v) Object.assign(v, info);
+    else vp.peers.set(c.from, { ...info, x: c.x, y: c.y });
+    vp.needsOverlay = true;
+    if (prev?.layer !== pr.layer) app.syncLayers();
     if (this.follow === c.from && c.view) {
-      Object.assign(this.app.edoc.view, { cx: c.view.cx, cy: c.view.cy, zoom: c.view.zoom, fit: false });
-      this.app.vp.viewChanged();
+      Object.assign(app.edoc.view, { cx: c.view.cx, cy: c.view.cy, zoom: c.view.zoom, fit: false });
+      vp.viewChanged();
     }
+  }
+
+  showPresence(m) {
+    const prev = this.presence.get(m.from) ?? {};
+    this.presence.set(m.from, { ...prev, mic: !!m.mic, cam: !!m.cam });
+    const color = this.peers.find((p) => p.id === m.from)?.color ?? '#d39b5c';
+    if (m.sel?.length) this.app.vp.peerSel.set(m.from, { loops: m.sel, color });
+    else this.app.vp.peerSel.delete(m.from);
+    this.app.vp.needsOverlay = true;
+    this.refreshPeople();
   }
 
   setFollow(peer) {
     this.follow = this.follow === peer ? null : peer;
     this.set({ follow: this.follow });
+  }
+
+  /** Centers my view on a friend's cursor. */
+  goToPeer(peer) {
+    const p = this.presence.get(peer);
+    const edoc = this.app.edoc;
+    if (!p || !edoc) return;
+    Object.assign(edoc.view, { cx: p.x, cy: p.y, fit: false });
+    this.app.vp.viewChanged();
   }
 
   // ---------- chat ----------
@@ -751,7 +930,13 @@ export class Live extends Emitter {
     this.mode = 'off';
     this.myId = null;
     this.follow = null;
+    clearInterval(this.presenceTimer);
+    this.presence.clear();
+    this.lastPos = null;
+    this.sentKey = '';
+    this.presenceKey = '';
     this.app.vp.peers.clear();
+    this.app.vp.peerSel.clear();
     this.set({ mode: 'off', step: 'idle', peers: [], words: [], qr: '' });
     this.app.syncTabs();
     this.app.syncLayers();

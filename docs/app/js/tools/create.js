@@ -2,7 +2,7 @@
 // and the eyedropper.
 
 import { makeLayer, newId } from '../../lib/doc.js';
-import { apply, invert, layerMatrix, hitTest } from '../../lib/geometry.js';
+import { apply, invert, layerMatrix } from '../../lib/geometry.js';
 import { fillGradient } from '../../lib/brush.js';
 import { floodSelect } from '../../lib/mask.js';
 import { seamlessPatch } from '../../lib/filters/heal.js';
@@ -16,18 +16,22 @@ export const text = {
   shortcut: 't',
   icon: 'text',
   cursor: 'text',
-  defaults: { font: 'Inter', size: 96, weight: 700, color: null, align: 'center', preset: null },
+  defaults: { font: 'Inter', size: 96, weight: 700, italic: false, color: null, align: 'center', preset: null },
   down(app, p) {
-    const hit = [...app.edoc.doc.layers].reverse().find((l) => l.type === 'text' && app.renderer.shown(l.id) && hitTest(l, app.renderer.size(l), p));
+    // a click while editing commits that text; on other text it edits that one instead
+    const wasEditing = app.textEditor?.isOpen?.();
+    app.textEditor?.close?.();
+    const hit = app.textLayerAt(p);
     if (hit) {
       app.selectLayer(hit.id);
       app.editText(hit.id);
       return;
     }
+    if (wasEditing) return;
     const o = app.opts('text');
     const id = newId();
     const preset = app.textPreset(o.preset);
-    const layer = makeLayer('text', { id, name: app.t('layer.text'), text: app.t('text.placeholder'), font: o.font, size: o.size, weight: o.weight, align: o.align, color: o.color ?? app.fg, x: p.x, y: p.y, ...preset });
+    const layer = makeLayer('text', { id, name: app.t('text.placeholder'), text: app.t('text.placeholder'), font: o.font, size: o.size, weight: o.weight, italic: !!o.italic, align: o.align, color: o.color ?? app.fg, x: p.x, y: p.y, ...preset });
     app.edoc.commit(app.t('history.addText'), [{ t: 'add', layer, index: app.insertIndex() }], { icon: 'text' });
     app.selectLayer(id);
     app.editText(id, true);
@@ -334,7 +338,7 @@ export const eyedropper = {
   group: 'eyedropper',
   shortcut: 'i',
   icon: 'eyedropper',
-  cursor: 'crosshair',
+  cursor: 'eyedropper',
   defaults: { sample: 1, layers: 'all' },
   async down(app, p) {
     await this.pick(app, p);

@@ -213,6 +213,19 @@ describe('PSD and PSB', () => {
     }
   });
 
+  it('keeps a private note on a layer (editable text) that other readers skip', async () => {
+    const src = layered();
+    const meta = JSON.stringify({ type: 'text', layer: { text: 'Olá\nmundo', size: 40 } });
+    src.layers[3] = { ...src.layers[3], meta };
+    for (const psb of [false, true]) {
+      const doc = await decodePsd(encodePsd(src, { psb }));
+      expect(doc.layers.map((l) => l.name)).toEqual(['Background', 'Note ção', 'Glow', 'Ideas']);
+      expect(doc.layers[2].meta).toBe(meta);
+      expect(doc.layers[0].meta).toBeUndefined();
+      same(doc, { data: src.composite });
+    }
+  });
+
   it('writes CMYK documents', async () => {
     const src = layered();
     const conv = cmykConverter();

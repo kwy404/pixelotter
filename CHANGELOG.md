@@ -2,6 +2,29 @@
 
 All notable changes to pixelotter are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- A tool cursor over the canvas: the brush outline at its real size and zoom, with a crosshair for small brushes and a precise crosshair with Caps Lock, for mouse, pen and touch.
+- Text layers you can edit again: click or double click the text, type, use Enter, arrows and Backspace, change font, size, color, bold, italic and alignment from the options bar, and keep the text editable through `.pxo` and PSD files saved by pixelotter.
+- Tooltips with a name, a line on what it does, a tip and the shortcut for tools, menus and controls, in English and Portuguese; a hint for the current tool in the status bar and the options bar.
+- Live presence: a name and color asked before the first session, smooth friend cursors with their tool, brush size and what they are doing, their selections, a dot on the layer they work on, and a people list with tool, layer, microphone, camera, follow and go to cursor.
+- The tour has Back, Escape and the arrow keys, follows window resizes and only points at what is on screen.
+
+### Fixed
+
+- Brush strokes had a dotted grey ring along their edge: the tip now falls off smoothly and every dab lands at its exact sub pixel position.
+- Tool overlays (selection drags, crop frame, transform handles, gradient line) were never drawn.
+- The tour card was misplaced after its first step and pointed at hidden parts.
+- Brush, eraser, clone, healing, dodge and blur tools had no keyboard shortcut.
+- Tab hid the panels even when a button had the focus, so the keyboard could not move between controls.
+- The keyboard shortcuts dialog failed to open.
+- Levels, curves, color balance, channel mixer and gradient map failed to preview or apply.
+- Quick select never found the subject.
+- Content aware fill with everything selected failed; it now explains that some pixels must stay outside the selection.
+- The blend mode list looked empty and the angle label was cut off in Portuguese.
+
 ## [0.1.0] - 2026-10-16
 
 ### Added

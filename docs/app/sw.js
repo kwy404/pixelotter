@@ -3,7 +3,7 @@
 // The precache block below is rewritten by scripts/build-app.mjs.
 
 // precache:start
-const CACHE_VERSION = '8adacb91183e';
+const CACHE_VERSION = '35d8f36cf022';
 const PRECACHE = [
   './',
   'app.css',
@@ -28,6 +28,7 @@ const PRECACHE = [
   'js/engine/selection.js',
   'js/engine/text.js',
   'js/files.js',
+  'js/help-text.js',
   'js/i18n.js',
   'js/live.js',
   'js/main.js',
@@ -39,6 +40,7 @@ const PRECACHE = [
   'js/tools/paint.js',
   'js/tools/select.js',
   'js/tools/transform.js',
+  'js/tooltips.js',
   'js/ui-context.js',
   'js/ui-dialogs.js',
   'js/ui-extra.js',

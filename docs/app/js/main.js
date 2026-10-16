@@ -45,7 +45,7 @@ async function boot() {
   // the component styles: the editor still works without them, so do not wait forever
   const css = document.getElementById('monsoon-css');
   const cssLoading = loaded(css, () => !!css?.sheet && css.media === 'all', 20000);
-  const [{ App }, { Viewport }, { Commands }, { installShell }, { installDialogs, PRESETS }, { installQuick }, { installLive }, { installExtra }, { MESSAGES }, { DIALOGS_HTML }, { Autosaver, recoverable }, { packDocument }, { loadFonts }, { makeCanvas, canvasToBlob }, { APP_VERSION }] = await Promise.all([
+  const [{ App }, { Viewport }, { Commands }, { installShell }, { installDialogs, PRESETS }, { installQuick }, { installLive }, { installExtra }, { MESSAGES }, { DIALOGS_HTML }, { Autosaver, recoverable }, { packDocument, LAYER_NAMES }, { loadFonts }, { makeCanvas, canvasToBlob }, { APP_VERSION }] = await Promise.all([
     import('./app.js'),
     import('./view/viewport.js'),
     import('./commands.js'),
@@ -63,6 +63,7 @@ async function boot() {
     import('./version.js'),
   ]);
   const { installContext } = await import('./ui-context.js'); // preloaded with the rest
+  const { installTooltips } = await import('./tooltips.js');
   step('Setting up the workspace', 0.45);
   document.getElementById('dialogs').innerHTML = DIALOGS_HTML;
 
@@ -165,6 +166,7 @@ async function boot() {
     cropAngle: 0,
     settings: {
       name: saved.name || '',
+      color: /^#[0-9a-f]{6}$/i.test(saved.color ?? '') ? saved.color : '',
       autosave: saved.autosave !== false,
       preloadModel: saved.preloadModel === true,
       defaultRole: saved.defaultRole === 'view' ? 'view' : 'edit',
@@ -189,11 +191,13 @@ async function boot() {
       join: { error: '' },
       confirm: { title: '', text: '', input: null, yes: null, no: null, third: null },
       guide: { axis: 'x', pos: 0 },
+      name: { name: '', color: '#d39b5c', colors: [] },
     },
   });
 
   V.i18n({ locale: lang, fallback: 'en', messages: MESSAGES, persist: false, detect: false });
   const tt = (key, params) => V.i18n.t(key, params);
+  LAYER_NAMES.background = tt('layer.background');
 
   const globals = { S };
   const ui = {};
@@ -211,7 +215,7 @@ async function boot() {
     onCursor: (p) => ctx.onCursor?.(p),
     onViewChange: () => {
       app.syncDocInfo();
-      app.textEditor?.close?.();
+      app.textEditor?.place?.(); // the open text editor follows zoom and pan
     },
     onGuideDrag: (g) => app.edoc?.commit(tt('history.guide'), [{ t: 'doc', props: { guides: [...app.edoc.doc.guides, g] } }]),
   });
@@ -224,6 +228,7 @@ async function boot() {
   installLive(ctx);
   installExtra(ctx);
   installContext(ctx);
+  installTooltips(ctx);
   S.adjustmentList = ['brightness-contrast', 'levels', 'curves', 'exposure', 'vibrance', 'hue-saturation', 'color-balance', 'black-white', 'photo-filter', 'channel-mixer', 'invert', 'posterize', 'threshold', 'gradient-map', 'selective-color', 'look', 'tone'];
 
   // keep the parts of the UI that depend on the active layer up to date
@@ -248,6 +253,7 @@ async function boot() {
   ui.setLanguage = (l) => {
     S.lang = l;
     V.i18n.setLocale(l);
+    LAYER_NAMES.background = tt('layer.background');
     document.documentElement.lang = l;
     ctx.saveLocal();
     S.menuBar = [...S.menuBar];

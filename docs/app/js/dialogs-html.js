@@ -283,6 +283,7 @@ export const DIALOGS_HTML = `
     <div class="settings-grid">
       <fieldset class="fieldset"><legend class="legend">{ $t('settings.general') }</legend>
         <label class="field"><span class="label">{ $t('settings.name') }</span><input class="input input-sm" maxlength="40" v-model="S.settings.name"></label>
+        <label class="field"><span class="label">{ $t('settings.color') }</span><input type="color" .value="S.settings.color || '#d39b5c'" @input="S.settings.color = $event.target.value" data-field="settings-color"></label>
         <label class="field"><span class="label">{ $t('settings.language') }</span><select class="select select-sm" .value="S.lang" @change="setLanguage($event.target.value)"><option value="en">English</option><option value="pt-BR">Portugu&ecirc;s</option></select></label>
         <label class="opt"><input type="checkbox" class="checkbox checkbox-sm" v-model="S.settings.autosave">{ $t('settings.autosave') }</label>
         <label class="opt"><input type="checkbox" class="checkbox checkbox-sm" v-model="S.settings.preloadModel">{ $t('settings.preloadModel') }</label>
@@ -347,14 +348,28 @@ export const DIALOGS_HTML = `
   </form>
 </dialog>
 
-<div class="tour" v-show="S.tour.on" role="dialog" aria-modal="true" :aria-label="$t('tour.label')">
+<dialog id="dlg-name" class="modal" aria-labelledby="dlg-name-title">
+  <form class="modal-box" @submit.prevent="nameOk()">
+    <div class="modal-header"><h2 id="dlg-name-title" class="modal-title">{ $t('name.title') }</h2></div>
+    <p class="hint">{ $t('name.text') }</p>
+    <label class="field"><span class="label">{ $t('settings.name') }</span><input id="name-input" class="input" maxlength="40" required autocomplete="nickname" v-model="S.dlg.name.name"></label>
+    <div class="name-colors" role="radiogroup" :aria-label="$t('settings.color')">
+      <button type="button" class="sw-pick" v-for="c in S.dlg.name.colors" :key="c" :class="{ on: S.dlg.name.color === c }" :style="{ background: c }" role="radio" :aria-checked="S.dlg.name.color === c ? 'true' : 'false'" :aria-label="c" @click="S.dlg.name.color = c"></button>
+      <input type="color" .value="S.dlg.name.color" @input="S.dlg.name.color = $event.target.value" :aria-label="$t('name.custom')" :title="$t('name.custom')">
+    </div>
+    <span class="name-preview" :style="{ background: S.dlg.name.color }">{ S.dlg.name.name || '...' }</span>
+    ${actions(`<button type="button" class="btn btn-ghost" @click="nameCancel()">{ $t('dialog.cancel') }</button><button class="btn btn-primary" type="submit" data-action="name-ok" :disabled="!S.dlg.name.name.trim()">{ $t('name.ok') }</button>`)}
+  </form>
+</dialog>
+
+<div class="tour" v-show="S.tour.on" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text">
   <div class="tour-spot" :style="S.tour.spot"></div>
   <div class="tour-card" :style="S.tour.card">
     <img src="art/otto-loader.svg" width="54" height="51" alt="">
     <p class="tour-step">{ S.tour.i + 1 } / { S.tour.n }</p>
-    <h3>{ $t('tour.' + S.tour.key + '.title') }</h3>
-    <p>{ $t('tour.' + S.tour.key + '.text') }</p>
-    <div class="modal-actions"><button type="button" class="btn btn-ghost btn-sm" @click="tourEnd()">{ $t('tour.skip') }</button><button type="button" class="btn btn-primary btn-sm" @click="tourNext()" data-action="tour-next">{ S.tour.i + 1 === S.tour.n ? $t('tour.done') : $t('tour.next') }</button></div>
+    <h3 id="tour-title">{ $t('tour.' + S.tour.key + '.title') }</h3>
+    <p id="tour-text">{ $t('tour.' + S.tour.key + '.text') }</p>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost btn-sm" @click="tourEnd()" data-action="tour-skip" v-show="S.tour.i + 1 < S.tour.n">{ $t('tour.skip') }</button><button type="button" class="btn btn-ghost btn-sm" @click="tourBack()" data-action="tour-back" v-show="S.tour.i > 0">{ $t('tour.back') }</button><button type="button" class="btn btn-primary btn-sm" @click="tourNext()" data-action="tour-next">{ S.tour.i + 1 === S.tour.n ? $t('tour.done') : $t('tour.next') }</button></div>
   </div>
 </div>
 `;

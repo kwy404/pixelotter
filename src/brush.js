@@ -11,36 +11,45 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const clamp255 = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
 
 /**
- * A round brush tip: a square of size x size coverage values (0..1). hardness 0..1 sets how
- * far the solid core reaches; roundness and angle squash and turn the tip.
+ * A round brush tip. hardness 0..1 sets how far the solid core reaches; roundness and angle
+ * squash and turn the tip. `at(dx, dy)` gives the coverage (0..1) at an offset in pixels from
+ * the dab center, so every dab lands at its exact sub pixel position with a smooth edge: a soft
+ * falloff that reaches zero at the rim, or, for a hard tip, one pixel of anti aliasing centered
+ * on the rim. An aliased tip (the pencil) is fully on or off. `data` holds the tip sampled
+ * around its center, size x size values.
  */
-export function brushTip(diameter, hardness = 0.8, { roundness = 1, angle = 0 } = {}) {
-  const size = Math.max(1, Math.ceil(diameter));
-  const r = diameter / 2;
-  const data = new Float32Array(size * size);
-  const c = (size - 1) / 2;
+export function brushTip(diameter, hardness = 0.8, { roundness = 1, angle = 0, aliased = false } = {}) {
+  const r = Math.max(0.5, diameter / 2);
   const cos = Math.cos((angle * Math.PI) / 180);
   const sin = Math.sin((angle * Math.PI) / 180);
-  const core = clamp(hardness, 0, 1);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = x - c;
-      const dy = y - c;
-      const u = dx * cos + dy * sin;
-      const v = (-dx * sin + dy * cos) / Math.max(0.05, roundness);
-      const d = Math.hypot(u, v) / Math.max(0.5, r);
-      let a;
-      if (d >= 1) a = d < 1 + 1 / Math.max(1, r) ? (1 + 1 / Math.max(1, r) - d) * Math.max(1, r) : 0; // one pixel of anti aliasing
-      else if (d <= core) a = 1;
-      else {
-        const t = (d - core) / (1 - core);
-        a = 0.5 + 0.5 * Math.cos(Math.PI * t);
-      }
-      data[y * size + x] = clamp(a, 0, 1);
-    }
+  const squash = 1 / Math.max(0.05, roundness);
+  let core = clamp(hardness, 0, 1);
+  // a falloff narrower than a pixel reads as a hard edge: anti alias the rim instead
+  if ((1 - core) * r < 1) core = 1;
+  const LUT = 1024;
+  const falloff = new Float32Array(LUT + 1);
+  for (let i = 0; i <= LUT; i++) {
+    const n = i / LUT;
+    falloff[i] = n <= core ? 1 : 0.5 + 0.5 * Math.cos((Math.PI * (n - core)) / (1 - core));
   }
-  if (diameter < 1.5) data.fill(1); // a one pixel pencil
-  return { size, radius: r, data };
+  const at = (dx, dy) => {
+    const u = dx * cos + dy * sin;
+    const v = (-dx * sin + dy * cos) * squash;
+    const dist = Math.sqrt(u * u + v * v);
+    if (aliased) return dist <= r + 0.05 || r <= 0.75 ? 1 : 0;
+    const edge = r + 0.5 - dist;
+    if (edge <= 0) return 0;
+    if (core >= 1) return edge >= 1 ? 1 : edge;
+    const n = dist / r;
+    return n >= 1 ? 0 : falloff[Math.round(n * LUT)];
+  };
+  // how far from the center the tip reaches, anti aliasing included
+  const reach = aliased ? r : (r + 0.5) * Math.max(1, squash);
+  const size = aliased ? Math.max(1, Math.round(diameter)) : Math.max(1, Math.ceil(reach * 2) + 1);
+  const data = new Float32Array(size * size);
+  const c = size / 2;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) data[y * size + x] = at(x + 0.5 - c, y + 0.5 - c);
+  return { size, radius: r, reach, data, at, aliased };
 }
 
 /**
@@ -98,11 +107,15 @@ export class Stroke {
   /** One dab at (cx, cy) in layer pixels, with an optional pressure (0..1). */
   dab(cx, cy, pressure = 1) {
     const tip = this.tip;
-    const lx = cx - this.region.x - tip.size / 2;
-    const ly = cy - this.region.y - tip.size / 2;
-    const ix = Math.round(lx);
-    const iy = Math.round(ly);
-    const r = this.markDirty(ix, iy, ix + tip.size, iy + tip.size);
+    // the dab center in region pixels; sub pixel tips are sampled at that exact spot
+    const ccx = cx - this.region.x;
+    const ccy = cy - this.region.y;
+    const ix = Math.round(ccx - tip.size / 2);
+    const iy = Math.round(ccy - tip.size / 2);
+    const exact = !tip.aliased && tip.at;
+    const r = exact
+      ? this.markDirty(Math.floor(ccx - tip.reach), Math.floor(ccy - tip.reach), Math.ceil(ccx + tip.reach), Math.ceil(ccy + tip.reach))
+      : this.markDirty(ix, iy, ix + tip.size, iy + tip.size);
     if (!r) return null;
     const { w } = this.region;
     const strength = this.flow * pressure;
@@ -115,7 +128,7 @@ export class Stroke {
     if (mode === 'smudge') smudgeNext = this.average(ix, iy, tip);
     for (let y = r.y0; y < r.y1; y++) {
       for (let x = r.x0; x < r.x1; x++) {
-        let a = tip.data[(y - iy) * tip.size + (x - ix)];
+        let a = exact ? tip.at(x + 0.5 - ccx, y + 0.5 - ccy) : tip.data[(y - iy) * tip.size + (x - ix)];
         if (!a) continue;
         const p = y * w + x;
         if (sel) a *= sel[p] / 255;

@@ -16,7 +16,7 @@ export const move = {
   group: 'move',
   shortcut: 'v',
   icon: 'move',
-  cursor: 'default',
+  cursor: 'move',
   defaults: { autoSelect: true, showTransform: true },
   hitHandle(app, p) {
     const l = app.edoc.activeLayer;
@@ -110,7 +110,7 @@ export const move = {
   hover(app, p) {
     const h = this.hitHandle(app, p);
     const cursors = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', rotate: 'grab' };
-    app.setCursor(h ? cursors[h] : 'default');
+    app.setCursor(h ? cursors[h] : 'move');
   },
   overlay(ctx, vp, app) {
     const l = app.edoc.activeLayer;

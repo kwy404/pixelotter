@@ -336,55 +336,138 @@ export function installExtra(ctx) {
   };
 
   // ---------- first run tour ----------
+  // Each step points at a part of the screen. Steps whose part is not showing (the toolbox on
+  // the home screen, the panels on a phone) are left out, the card is placed beside its target
+  // and kept inside the window, and the tour follows resizes. Escape skips it, the arrow keys
+  // step through it, and focus stays in the card until it closes.
   const STEPS = [
     { key: 'welcome', sel: null },
-    { key: 'tools', sel: '.toolbox', pro: true },
-    { key: 'options', sel: '.optbar', pro: true },
-    { key: 'layers', sel: '[data-panel-group="c"]', pro: true },
+    { key: 'tools', sel: '.toolbox' },
+    { key: 'options', sel: '.optbar' },
+    { key: 'layers', sel: '[data-panel-group="c"]' },
     { key: 'quick', sel: '.ws-switch' },
     { key: 'share', sel: '[data-action="share"]' },
     { key: 'export', sel: '[data-action="export"]' },
   ];
-  let steps = [];
-  ui.tour = () => {
-    steps = STEPS.filter((s) => !s.pro || S.workspace === 'pro');
-    S.tour = { on: true, i: 0, n: steps.length, key: steps[0].key, spot: {}, card: {} };
-    placeTour();
+  const MARGIN = 12;
+  const GAP = 14;
+  /** The target's box when it is on screen, or null. */
+  const shown = (sel) => {
+    const el = sel ? document.querySelector(sel) : null;
+    if (!el || el.closest('[hidden]') || getComputedStyle(el).visibility === 'hidden') return null;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return null;
+    // a phone's panel sheet keeps its size while it waits below the screen
+    if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) return null;
+    return r;
   };
+  const tourEl = () => document.querySelector('.tour');
+  let steps = [];
+  let returnFocus = null;
+  let frame = 0;
+
+  /** Where the card goes: beside the target where it fits, else below or above, else centered. */
+  const cardSpot = (r, w, h) => {
+    const vw = innerWidth;
+    const vh = innerHeight;
+    const clampX = (x) => Math.max(MARGIN, Math.min(vw - w - MARGIN, x));
+    const clampY = (y) => Math.max(MARGIN, Math.min(vh - h - MARGIN, y));
+    if (!r) return { left: (vw - w) / 2, top: Math.max(MARGIN, (vh - h) / 2) };
+    const options = [
+      [r.right + GAP + w + MARGIN <= vw, () => ({ left: r.right + GAP, top: clampY(r.top) })],
+      [r.left - GAP - w - MARGIN >= 0, () => ({ left: r.left - GAP - w, top: clampY(r.top) })],
+      [r.bottom + GAP + h + MARGIN <= vh, () => ({ left: clampX(r.left), top: r.bottom + GAP })],
+      [r.top - GAP - h - MARGIN >= 0, () => ({ left: clampX(r.left), top: r.top - GAP - h })],
+    ];
+    // a target as wide as the window reads better with the card under it
+    if (r.width > vw * 0.6) options.unshift(options.splice(2, 1)[0]);
+    const fit = options.find(([ok]) => ok);
+    return fit ? fit[1]() : { left: clampX((vw - w) / 2), top: clampY(vh - h - MARGIN) };
+  };
+
   const placeTour = () => {
+    if (!S.tour.on) return;
     const s = steps[S.tour.i];
     S.tour.key = s.key;
-    const el = s.sel ? document.querySelector(s.sel) : null;
-    const r = el?.getBoundingClientRect();
-    if (!r || !r.width) {
-      S.tour.spot = { display: 'none' };
-      S.tour.card = { left: '50%', top: '50%', transform: 'translate(-50%, -50%)' };
-      return;
+    const r = shown(s.sel);
+    const w = Math.min(340, innerWidth - MARGIN * 2);
+    S.tour.spot = r
+      ? { display: 'block', left: `${Math.max(2, r.left - 6)}px`, top: `${Math.max(2, r.top - 6)}px`, width: `${Math.min(innerWidth - 4, r.right + 6) - Math.max(2, r.left - 6)}px`, height: `${Math.min(innerHeight - 4, r.bottom + 6) - Math.max(2, r.top - 6)}px` }
+      : { display: 'none' };
+    // measure the card with this step's text before placing it
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      const card = document.querySelector('.tour-card');
+      const h = card?.offsetHeight || 220;
+      const at = cardSpot(r, w, h);
+      S.tour.card = { left: `${Math.round(at.left)}px`, top: `${Math.round(at.top)}px`, width: `${w}px`, transform: 'none' };
+    });
+  };
+
+  const onKey = (e) => {
+    if (!S.tour.on) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      globals.tourEnd();
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.key === 'ArrowRight') globals.tourNext();
+      else globals.tourBack();
+    } else if (e.key === 'Tab') {
+      // keep focus on the card's buttons
+      const buttons = [...(tourEl()?.querySelectorAll('button') ?? [])].filter((b) => b.offsetParent);
+      if (!buttons.length) return;
+      const i = buttons.indexOf(document.activeElement);
+      const next = e.shiftKey ? (i <= 0 ? buttons.length - 1 : i - 1) : i < 0 || i === buttons.length - 1 ? 0 : i + 1;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      buttons[next].focus();
+    } else {
+      // the editor's shortcuts wait until the tour is over (Enter and Space still press the
+      // focused button: that is the browser's default, not a listener)
+      e.stopImmediatePropagation();
     }
-    S.tour.spot = { display: 'block', left: `${r.left - 6}px`, top: `${r.top - 6}px`, width: `${r.width + 12}px`, height: `${r.height + 12}px` };
-    const cardW = Math.min(340, window.innerWidth - 24);
-    let left = r.right + 16;
-    let top = r.top;
-    if (left + cardW > window.innerWidth) left = Math.max(12, r.left - cardW - 16);
-    if (left < 12 || r.width > window.innerWidth * 0.6) {
-      left = Math.max(12, Math.min(window.innerWidth - cardW - 12, r.left));
-      top = r.bottom + 14;
-    }
-    if (top + 220 > window.innerHeight) top = Math.max(12, r.top - 230);
-    S.tour.card = { left: `${left}px`, top: `${top}px`, width: `${cardW}px` };
+  };
+  const focusNext = () => requestAnimationFrame(() => tourEl()?.querySelector('[data-action="tour-next"]')?.focus());
+
+  ui.tour = () => {
+    // only the steps whose part of the screen shows right now
+    steps = STEPS.filter((s) => !s.sel || shown(s.sel));
+    if (!S.tour.on) returnFocus = document.activeElement;
+    S.tour = { on: true, i: 0, n: steps.length, key: steps[0].key, spot: { display: 'none' }, card: { left: '50%', top: '50%', width: `${Math.min(340, innerWidth - MARGIN * 2)}px`, transform: 'translate(-50%, -50%)' } };
+    placeTour();
+    window.addEventListener('resize', placeTour);
+    window.addEventListener('keydown', onKey, true);
+    focusNext();
   };
   globals.tourNext = () => {
     if (S.tour.i + 1 >= S.tour.n) return globals.tourEnd();
     S.tour.i++;
     placeTour();
+    focusNext();
+  };
+  globals.tourBack = () => {
+    if (S.tour.i <= 0) return;
+    S.tour.i--;
+    placeTour();
+    focusNext();
   };
   globals.tourEnd = () => {
+    if (!S.tour.on) return;
     S.tour.on = false;
+    cancelAnimationFrame(frame);
+    window.removeEventListener('resize', placeTour);
+    window.removeEventListener('keydown', onKey, true);
     try {
       localStorage.setItem('pixelotter:toured', '1');
     } catch {
       // private mode
     }
+    const back = returnFocus;
+    returnFocus = null;
+    if (back?.isConnected && back !== document.body) back.focus?.();
   };
   ctx.maybeTour = () => {
     let seen = false;

@@ -65,6 +65,35 @@ describe('painting engine', () => {
     expect(tip.data[0]).toBe(0);
   });
 
+  it('a stroke edge falls off once, with no ring, wherever the dabs land', () => {
+    for (const hardness of [0.7, 1]) {
+      const region = { x: 0, y: 0, w: 60, h: 40 };
+      const original = new Uint8ClampedArray(60 * 40 * 4);
+      const s = new Stroke({ region, original, mode: 'paint', color: [0, 0, 0], tip: brushTip(16, hardness) });
+      // a slanted line of dabs at sub pixel positions, 15% of the diameter apart
+      for (let x = 8; x <= 52; x += 2.4) s.dab(x, 20.3 + (x - 8) * 0.07);
+      for (const col of [15, 30, 45]) {
+        const a = [];
+        for (let y = 0; y < 40; y++) a.push(s.buf[(y * 60 + col) * 4 + 3]);
+        const peak = a.indexOf(Math.max(...a));
+        for (let y = 1; y <= peak; y++) expect(a[y]).toBeGreaterThanOrEqual(a[y - 1] - 1);
+        for (let y = peak + 1; y < 40; y++) expect(a[y]).toBeLessThanOrEqual(a[y - 1] + 1);
+        expect(a[peak]).toBe(255);
+      }
+    }
+  });
+
+  it('a hard tip anti aliases one pixel at its rim and the pencil does not', () => {
+    const hard = brushTip(10, 1);
+    const edge = hard.at(5, 0);
+    expect(edge).toBeGreaterThan(0.4);
+    expect(edge).toBeLessThan(0.6);
+    expect(hard.at(3, 0)).toBe(1);
+    expect(hard.at(6, 0)).toBe(0);
+    const pencil = brushTip(4, 1, { aliased: true });
+    expect([...pencil.data].every((v) => v === 0 || v === 1)).toBe(true);
+  });
+
   it('dabs are spaced evenly across segments', () => {
     const a = dabPositions(0, 0, 10, 0, 4);
     expect(a.points.map((p) => p[0])).toEqual([0, 4, 8]);

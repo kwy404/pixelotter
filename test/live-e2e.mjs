@@ -1,8 +1,10 @@
 // End to end test of a live room in four headless browser contexts with fake media devices.
 // The host opens a room; one friend opens the invite link, one scans the QR code (decoded
 // here with an independent reader) and one pastes the six words into the first box. All three
-// must land in the same room. Then: co-editing with cursors, chat, voice with noise
-// suppression, mute, camera on and off, a device switch and screen sharing.
+// must land in the same room (the one who never gave a name is asked for one first). Then:
+// co-editing with cursors, presence (name tags, the tool icon, what each person is doing),
+// chat, voice with noise suppression, mute, camera on and off, a device switch and screen
+// sharing.
 // Usage: node test/live-e2e.mjs   (set BROWSER_PATH to use another Chromium based browser)
 import jsQR from 'jsqr';
 import { check, closeAll, failed, launch, openApp, openSample, serve, step } from './e2e-helpers.mjs';
@@ -25,7 +27,8 @@ let link = '';
 try {
   await step('host opens a room', async () => {
     for (const p of all) await openApp(p, base);
-    for (const [p, n] of [[a, 'Ana'], [b, 'Bia'], [c, 'Caio'], [d, 'Duda']]) await setName(p, n);
+    // the fourth friend never set a name: joining asks for it
+    for (const [p, n] of [[a, 'Ana'], [b, 'Bia'], [c, 'Caio']]) await setName(p, n);
     await openSample(a);
     await a.click('[data-action="share"]');
     await a.waitForFunction(() => window.pixelotter.S.live.step === 'code', null, { timeout: 90000 });
@@ -80,6 +83,15 @@ try {
     await d.fill('#join-word-0', `Join my pixelotter room: ${words.join(' ')}`);
     const boxes = await d.evaluate(() => [0, 1, 2, 3, 4, 5].map((i) => document.getElementById(`join-word-${i}`).value));
     check(JSON.stringify(boxes) === JSON.stringify(words), `one word per box (${boxes.join(' ')})`);
+    await d.waitForSelector('#dlg-name[open]', { timeout: 15000 });
+    check(true, 'joining without a name asks for one');
+    const auto = await d.evaluate(() => window.pixelotter.S.dlg.name.color);
+    check(/^#[0-9a-f]{6}$/i.test(auto), `a color is picked already (${auto})`);
+    await d.fill('#name-input', 'Duda');
+    await d.click('.name-colors .sw-pick >> nth=3');
+    await d.click('[data-action="name-ok"]');
+    const saved = await d.evaluate(() => JSON.parse(localStorage.getItem('pixelotter:settings')));
+    check(saved.name === 'Duda' && saved.color === '#c99ac2', `name and color are remembered (${saved.name}, ${saved.color})`);
     await waitLive(d);
   });
 
@@ -115,6 +127,46 @@ try {
     for (let i = 0; i < 6; i++) await b.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
     await a.waitForFunction(() => [...window.pixelotter.app.vp.peers.values()].some((p) => p.name === 'Bia'), null, { timeout: 20000 });
     check(true, 'the host sees the guest cursor');
+  });
+
+  await step('presence: name tags, tools and what people are doing', async () => {
+    await a.evaluate(() => window.pixelotter.ctx.ui.closeDialog('dlg-live'));
+    const bia = () =>
+      a.evaluate(() => {
+        const id = window.pixelotter.S.live.peers.find((p) => p.name === 'Bia')?.id;
+        const el = document.querySelector(`.peer-cursor[data-peer-cursor="${id}"]`);
+        if (!el) return null;
+        const r = el.querySelector('.peer-tag').getBoundingClientRect();
+        return { name: el.querySelector('.peer-name').textContent, visible: r.width > 0 && r.height > 0, tool: el.querySelector('.peer-tool use').getAttribute('href'), act: el.querySelector('.peer-act').hidden ? '' : el.querySelector('.peer-act').textContent, color: getComputedStyle(el.querySelector('.peer-tag')).backgroundColor, ring: el.querySelector('.peer-ring').hidden ? 0 : el.querySelector('.peer-ring').getBoundingClientRect().width };
+      });
+    let t = await bia();
+    check(t?.name === 'Bia' && t.visible, 'the guest name tag shows next to her cursor');
+    // switching tools is enough: no pointer movement needed
+    await b.evaluate(() => {
+      const app = window.pixelotter.app;
+      app.opts('brush').size = 60;
+      app.setTool('brush');
+    });
+    await a.waitForFunction(() => document.querySelector('.peer-cursor .peer-tool use')?.getAttribute('href')?.endsWith('#i-brush'), null, { timeout: 10000 }).catch(() => {});
+    t = await bia();
+    check(t?.tool.endsWith('#i-brush'), `the host sees the brush icon when the guest picks the brush (${t?.tool})`);
+    const zoom = await a.evaluate(() => window.pixelotter.app.vp.view.zoom);
+    check(Math.abs(t.ring - 60 * zoom) < 3, `and the guest brush size as a circle (${Math.round(t.ring)} px)`);
+    const box = await b.locator('.vp-stage').boundingBox();
+    await b.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await b.mouse.down();
+    let seen = '';
+    for (let i = 0; i < 40 && !seen; i++) {
+      await b.mouse.move(box.x + box.width / 2 + i * 4, box.y + box.height / 2 + i * 2);
+      seen = (await bia())?.act ?? '';
+    }
+    await b.mouse.up();
+    check(seen === 'painting', `the activity shows while she paints (${seen})`);
+    const people = await a.evaluate(() => window.pixelotter.S.live.peers.find((p) => p.name === 'Bia'));
+    check(people.toolName === 'Brush' && !!people.layerName, `the people list shows her tool and layer (${people.toolName}, ${people.layerName})`);
+    const dots = await a.evaluate(() => document.querySelectorAll('.layer-row .peer-mini').length);
+    check(dots > 0, 'the layer she works on carries her dot in the Layers panel');
+    await b.evaluate(() => window.pixelotter.app.run('edit.undo'));
   });
 
   await step('chat', async () => {

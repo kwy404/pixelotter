@@ -104,7 +104,8 @@ export function normalizeParams(id, params = {}) {
     } else if (p.type === 'checkbox') out[p.key] = v === true;
     else if (p.type === 'select') out[p.key] = p.options.includes(v) ? v : out[p.key];
     else if (p.type === 'color') out[p.key] = /^#[0-9a-f]{6}$/i.test(v) ? v : out[p.key];
-    else out[p.key] = structuredClone(v);
+    // a plain copy: the value may come from the reactive interface store, which cannot be cloned
+    else out[p.key] = v === undefined ? v : JSON.parse(JSON.stringify(v));
   }
   return out;
 }

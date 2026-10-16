@@ -1,6 +1,7 @@
 // End to end test of the editor in two headless browser contexts: open the app, load the
 // sample, adjust it, add text, remove the background, use the menus, export a PNG, save and
-// reopen a .pxo project, and send the export to a second context with a SHA-256 match.
+// reopen a .pxo project, check the tool cursors, the brush edge, the tour (at 1440 and 375
+// wide), editable text and the tooltips, and send the export to a second context with a SHA-256 match.
 // Usage: node test/app-e2e.mjs   (set BROWSER_PATH to use another Chromium based browser)
 import { readFileSync } from 'node:fs';
 import { check, closeAll, failed, launch, openApp, openSample, serve, sha256, step } from './e2e-helpers.mjs';
@@ -204,6 +205,282 @@ try {
     await a.evaluate(() => window.pixelotter.app.run('select.none'));
   });
 
+  await step('tool cursors over the canvas', async () => {
+    await a.evaluate(() => window.pixelotter.ctx.contextMenu?.close());
+    const box = await a.locator('.vp-stage').boundingBox();
+    const mx = box.x + box.width / 2 + 0.25;
+    const my = box.y + box.height / 2 + 0.75;
+    const cursor = () =>
+      a.evaluate(() => {
+        const vp = window.pixelotter.app.vp;
+        const el = document.querySelector('.vp-cursor');
+        const svg = el.querySelector('svg')?.getBoundingClientRect();
+        return { css: vp.stage.style.cursor, hidden: el.hidden, size: Number(el.dataset.size), mode: el.dataset.mode, zoom: vp.view.zoom, cx: svg ? svg.left + svg.width / 2 : null, cy: svg ? svg.top + svg.height / 2 : null };
+      });
+    await a.evaluate(() => {
+      const app = window.pixelotter.app;
+      app.setTool('brush');
+      app.opts('brush').size = 40;
+    });
+    await a.mouse.move(mx, my);
+    let c = await cursor();
+    check(c.css === 'none' && !c.hidden, 'the brush hides the arrow and shows its outline');
+    check(Math.abs(c.size - 40 * c.zoom) < 0.6, `the outline matches the brush at ${Math.round(c.zoom * 100)}% (${c.size} px)`);
+    check(Math.abs(c.cx - mx) < 0.6 && Math.abs(c.cy - my) < 0.6, 'the outline is centered on the pointer');
+    await a.evaluate(() => window.pixelotter.app.vp.setZoom(3, null));
+    await a.mouse.move(mx + 7, my + 3);
+    c = await cursor();
+    check(Math.abs(c.size - 120) < 0.6 && Math.abs(c.cx - (mx + 7)) < 0.6, 'the outline follows the zoom and the pointer');
+    await a.evaluate(() => (window.pixelotter.app.opts('brush').size = 2));
+    await a.waitForTimeout(100);
+    c = await cursor();
+    check(Math.abs(c.size - 6) < 0.6 && (await a.locator('.vp-cursor path').count()) > 0, 'a small brush gets a crosshair in the middle');
+    await a.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'CapsLock', modifierCapsLock: true })));
+    c = await cursor();
+    check(c.mode === 'precise' && !c.hidden, 'Caps Lock switches to the precise crosshair');
+    await a.evaluate(() => window.dispatchEvent(new KeyboardEvent('keyup', { key: 'CapsLock', modifierCapsLock: false })));
+    check((await cursor()).mode === 'outline', 'and back to the outline');
+    // a pen hovering shows the outline; a finger shows it only while it touches
+    const synth = (type, kind) =>
+      a.evaluate(
+        ([type, kind, x, y]) => document.querySelector('.vp-stage').dispatchEvent(new PointerEvent(type, { pointerType: kind, pointerId: 7, clientX: x, clientY: y, bubbles: true, isPrimary: true })),
+        [type, kind, mx + 20, my + 20],
+      );
+    await synth('pointermove', 'pen');
+    c = await cursor();
+    check(!c.hidden && Math.abs(c.cx - (mx + 20)) < 0.6, 'a hovering pen shows the outline');
+    await synth('pointermove', 'touch');
+    check((await cursor()).hidden, 'a finger that is not touching shows nothing');
+    await a.mouse.move(box.x + box.width + 40, box.y + 10);
+    check((await cursor()).hidden, 'leaving the canvas hides the outline');
+    const css = {};
+    for (const tool of ['move', 'marquee', 'lasso', 'eyedropper', 'crop', 'text', 'hand', 'zoom', 'eraser']) {
+      await a.evaluate((t) => window.pixelotter.app.setTool(t), tool);
+      await a.mouse.move(mx, my);
+      c = await cursor();
+      css[tool] = c.hidden ? c.css.slice(0, 4) : 'outline';
+    }
+    check(css.move === 'move' && css.marquee === 'cros' && css.lasso === 'cros' && css.crop === 'cros' && css.text === 'text' && css.hand === 'grab' && css.zoom === 'zoom' && css.eyedropper === 'url(' && css.eraser === 'outline', `every tool has its cursor (${JSON.stringify(css)})`);
+    await a.evaluate(() => {
+      const app = window.pixelotter.app;
+      app.opts('brush').size = 40;
+      app.setTool('move');
+      app.vp.fit();
+    });
+  });
+
+  await step('a black brush on white has clean edges', async () => {
+    const back = await a.evaluate(() => window.pixelotter.app.edoc.uid);
+    await a.evaluate(() => {
+      const app = window.pixelotter.app;
+      app.newDocument({ width: 600, height: 400 });
+      app.setTool('brush');
+      app.setColor('fg', '#000000');
+      Object.assign(app.opts('brush'), { size: 40, hardness: 0.7, opacity: 1, flow: 1 });
+    });
+    await a.waitForTimeout(300);
+    const at = (x, y) =>
+      a.evaluate(([x, y]) => {
+        const vp = window.pixelotter.app.vp;
+        const b = vp.stage.getBoundingClientRect();
+        const s = vp.toScreen(x, y);
+        return { x: b.left + s.x, y: b.top + s.y };
+      }, [x, y]);
+    let q = await at(100, 150);
+    await a.mouse.move(q.x, q.y);
+    await a.mouse.down();
+    for (let i = 1; i <= 40; i++) {
+      q = await at(100 + i * 10, 150 + i * 2.3);
+      await a.mouse.move(q.x, q.y);
+    }
+    await a.mouse.up();
+    // walk down a column through the stroke: the alpha rises once and falls once
+    const bumps = await a.evaluate(() => {
+      const app = window.pixelotter.app;
+      const l = app.edoc.doc.layers.at(-1);
+      let bad = 0;
+      for (const col of [180, 251, 333, 407]) {
+        const px = app.edoc.assets.read(l.asset, { x: col, y: 0, w: 1, h: 400 });
+        const al = [];
+        for (let y = 0; y < 400; y++) al.push(px[y * 4 + 3]);
+        const peak = al.indexOf(Math.max(...al));
+        for (let y = 1; y <= peak; y++) if (al[y] < al[y - 1] - 1) bad++;
+        for (let y = peak + 1; y < 400; y++) if (al[y] > al[y - 1] + 1) bad++;
+      }
+      return bad;
+    });
+    check(bumps === 0, `the stroke edge falls off smoothly, without a ring (${bumps} bumps)`);
+    await a.evaluate((uid) => {
+      const app = window.pixelotter.app;
+      app.closeDoc(app.edoc.uid);
+      app.activate(uid);
+      app.setTool('move');
+    }, back);
+  });
+
+  await step('the tour', async () => {
+    const tour = () =>
+      a.evaluate(() => {
+        const S = window.pixelotter.S;
+        const box = (el) => {
+          const r = el?.getBoundingClientRect();
+          return r && { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height };
+        };
+        const spot = document.querySelector('.tour-spot');
+        const sel = { tools: '.toolbox', options: '.optbar', layers: '[data-panel-group="c"]', quick: '.ws-switch', share: '[data-action="share"]', export: '[data-action="export"]' }[S.tour.key];
+        return { on: S.tour.on, i: S.tour.i, n: S.tour.n, key: S.tour.key, card: box(document.querySelector('.tour-card')), spot: getComputedStyle(spot).display === 'none' ? null : box(spot), target: sel ? box(document.querySelector(sel)) : null, vw: innerWidth, vh: innerHeight, focus: document.activeElement?.dataset.action ?? '' };
+      });
+    const inside = (c, s) => c.l >= 0 && c.t >= 0 && c.r <= s.vw && c.b <= s.vh;
+    const overlaps = (x, y) => x.l < y.r && y.l < x.r && x.t < y.b && y.t < x.b;
+    const walk = async (label) => {
+      await a.evaluate(() => window.pixelotter.app.run('help.tour'));
+      await a.waitForTimeout(450);
+      let s = await tour();
+      check(s.on && s.key === 'welcome' && s.focus === 'tour-next', `${label}: the tour opens on the welcome card with Next focused`);
+      const seen = [];
+      const wrong = [];
+      for (let k = 0; k < 10 && s.on; k++) {
+        seen.push(s.key);
+        if (!inside(s.card, s)) wrong.push(`${s.key}: card outside the window`);
+        if (s.key !== 'welcome') {
+          // the spotlight sits on a target that is on screen, and the card does not cover it
+          // the part of the target inside the window
+          const v = s.target && { l: Math.max(0, s.target.l), t: Math.max(0, s.target.t), r: Math.min(s.vw, s.target.r), b: Math.min(s.vh, s.target.b) };
+          if (!v || !s.spot || v.r - v.l < 4 || v.b - v.t < 4) wrong.push(`${s.key}: target not on screen`);
+          else if (s.spot.l > v.l + 6 || s.spot.t > v.t + 6 || s.spot.r < v.r - 6 || s.spot.b < v.b - 6) wrong.push(`${s.key}: spotlight misses the target`);
+          else if (overlaps(s.card, v)) wrong.push(`${s.key}: card covers the target`);
+        }
+        if (s.i === 1) {
+          await a.click('[data-action="tour-back"]');
+          await a.waitForTimeout(450);
+          const back = await tour();
+          check(back.i === 0 && back.key === 'welcome', `${label}: Back returns to the previous step`);
+          await a.click('[data-action="tour-next"]');
+          await a.waitForTimeout(450);
+        }
+        await a.click('[data-action="tour-next"]');
+        await a.waitForTimeout(450);
+        s = await tour();
+      }
+      check(!wrong.length, `${label}: every step points at a visible part and the card stays in the window (${wrong.length ? wrong.join('; ') : seen.join(', ')})`);
+      check(!s.on && !(await a.isVisible('.tour')), `${label}: the last step finishes the tour`);
+      return seen;
+    };
+    const wide = await walk('1440');
+    check(wide.length === 7, `all seven steps in the Pro workspace (${wide.length})`);
+    // after the tour the editor takes clicks again
+    const box = await a.locator('.vp-stage').boundingBox();
+    const free = await a.evaluate(([x, y]) => !document.elementFromPoint(x, y)?.closest('.tour'), [box.x + box.width / 2, box.y + box.height / 2]);
+    check(free, 'nothing of the tour blocks the canvas once it is closed');
+    // Skip and Escape
+    await a.evaluate(() => window.pixelotter.app.run('help.tour'));
+    await a.waitForTimeout(300);
+    await a.click('[data-action="tour-next"]');
+    await a.click('[data-action="tour-skip"]');
+    check(!(await tour()).on, 'Skip closes the tour');
+    await a.evaluate(() => window.pixelotter.app.run('help.tour'));
+    await a.waitForTimeout(300);
+    const tool = await a.evaluate(() => window.pixelotter.app.toolId);
+    await a.keyboard.press('b');
+    check((await a.evaluate(() => window.pixelotter.app.toolId)) === tool, 'tool keys wait while the tour is open');
+    await a.keyboard.press('Escape');
+    check(!(await tour()).on, 'Escape closes the tour');
+    check(await a.evaluate(() => localStorage.getItem('pixelotter:toured') === '1'), 'the tour is remembered as seen');
+    // a phone
+    await a.setViewportSize({ width: 375, height: 812 });
+    await a.waitForTimeout(500);
+    const narrow = await walk('375');
+    check(narrow.length >= 2 && !narrow.includes('tools') && !narrow.includes('options'), `on a phone only the parts on screen (${narrow.join(', ')})`);
+    await a.setViewportSize({ width: 1440, height: 900 });
+    await a.waitForTimeout(500);
+  });
+
+  await step('editable text layers', async () => {
+    await a.evaluate(() => window.pixelotter.ctx.contextMenu?.close());
+    const at = (x, y) =>
+      a.evaluate(([x, y]) => {
+        const vp = window.pixelotter.app.vp;
+        const b = vp.stage.getBoundingClientRect();
+        const s = vp.toScreen(x, y);
+        return { x: b.left + s.x, y: b.top + s.y };
+      }, [x, y]);
+    const textLayers = () => a.evaluate(() => window.pixelotter.app.edoc.doc.layers.filter((l) => l.type === 'text').map((l) => ({ id: l.id, name: l.name, text: l.text, size: l.size })));
+    const editing = () => a.evaluate(() => !document.getElementById('text-editor').hidden && document.activeElement?.id === 'text-editor');
+    const before = (await textLayers()).length;
+    await a.evaluate(() => {
+      window.pixelotter.ctx.ui.openPanel('layers');
+      window.pixelotter.app.setTool('text');
+    });
+    const q = await at(400, 300);
+    await a.mouse.click(q.x, q.y);
+    await a.waitForTimeout(200);
+    check(await editing(), 'a click with the Text tool opens the editor with the caret in it');
+    await a.keyboard.type('Hello');
+    await a.keyboard.press('Enter');
+    await a.keyboard.type('there');
+    await a.keyboard.press('Escape');
+    let list = await textLayers();
+    const made = list.at(-1);
+    check(list.length === before + 1 && made.text === 'Hello\nthere', `typing, Enter for a new line and Escape commit the text (${JSON.stringify(made?.text)})`);
+    check(made.name === 'Hello', `the layer is named after its text (${made.name})`);
+    const row = a.locator(`.layer-row[data-layer="${made.id}"]`);
+    check((await row.count()) === 1 && (await row.locator('.thumb-t').isVisible()), 'the layer shows in the panel with a T');
+    // back into the text: a click on it with the Text tool
+    await a.mouse.click(q.x, q.y);
+    await a.waitForTimeout(200);
+    check(await editing(), 'a click on the text enters edit mode again');
+    await a.keyboard.press('Control+End');
+    await a.keyboard.press('Backspace');
+    await a.keyboard.type('e!');
+    // a click outside commits and does not start another text
+    const out = await at(40, 40);
+    await a.mouse.click(out.x, out.y);
+    list = await textLayers();
+    check(list.length === before + 1 && list.at(-1).text === 'Hello\nthere!' && !(await editing()), `a click outside commits the change (${JSON.stringify(list.at(-1).text)})`);
+    // the size from the options bar, live
+    await a.fill('[data-field="text-size"]', '150');
+    await a.waitForTimeout(200);
+    list = await textLayers();
+    check(list.at(-1).size === 150, `the options bar changes the size of the selected text (${list.at(-1).size})`);
+    await a.evaluate(() => window.pixelotter.app.run('edit.undo'));
+    list = await textLayers();
+    check(list.at(-1).size !== 150, 'undo takes the size back');
+    await a.evaluate(() => window.pixelotter.app.run('edit.undo'));
+    list = await textLayers();
+    check(list.at(-1).text === 'Hello\nthere', 'undo takes the text edit back');
+    check((await row.count()) === 1, 'the text layer is still in the panel');
+    // a double click on the canvas with the Move tool opens the text too
+    await a.evaluate(() => window.pixelotter.app.setTool('move'));
+    await a.mouse.dblclick(q.x, q.y);
+    await a.waitForTimeout(200);
+    check(await editing(), 'a double click on the text with the Move tool edits it');
+    await a.keyboard.press('Escape');
+    await a.evaluate(() => window.pixelotter.app.setTool('move'));
+  });
+
+  await step('tooltips', async () => {
+    await a.mouse.move(5, 450);
+    await a.hover('.tool-btn[data-tool="brush"]');
+    await a.waitForSelector('#po-tip:not([hidden])', { timeout: 3000 });
+    const tip = await a.evaluate(() => {
+      const t = document.getElementById('po-tip');
+      const r = t.getBoundingClientRect();
+      const s = document.querySelector('.vp-stage').getBoundingClientRect();
+      return { text: t.textContent, x: r.left, right: r.right, inside: r.right <= innerWidth && r.bottom <= innerHeight, native: document.querySelector('.tool-btn[data-tool="brush"]').getAttribute('title'), left: s.left };
+    });
+    check(tip.text.includes('Brush') && tip.text.includes('B') && tip.text.includes('foreground'), `the brush button explains itself with its shortcut (${tip.text.slice(0, 60)})`);
+    check(tip.inside && tip.native === null, 'the tooltip stays in the window and replaces the browser tooltip');
+    await a.mouse.move(700, 500);
+    await a.waitForTimeout(100);
+    check(await a.evaluate(() => document.getElementById('po-tip').hidden), 'it hides when the pointer leaves');
+    await a.focus('[data-action="export"]');
+    await a.keyboard.press('Shift+Tab');
+    await a.keyboard.press('Tab');
+    await a.waitForSelector('#po-tip:not([hidden])', { timeout: 3000 }).catch(() => {});
+    check(await a.evaluate(() => !document.getElementById('po-tip').hidden), 'keyboard focus shows the tooltip too');
+    check((await a.textContent('[data-field="tool-hint"]')).length > 5, 'the status bar says what to do with the tool');
+  });
+
   const exportAs = async (format, cmyk = false) => {
     await a.evaluate(() => window.pixelotter.ctx.contextMenu?.close());
     await a.click('[data-action="export"]');
@@ -224,8 +501,10 @@ try {
     const n = await a.evaluate(() => window.pixelotter.app.docs.length);
     await a.setInputFiles('#file-input', psd.path);
     await a.waitForFunction((k) => window.pixelotter.app.docs.length === k + 1, n, { timeout: 60000 });
-    const got = (await layers(a)).length;
+    const back = await layers(a);
+    const got = back.length;
     check(got === want, `the PSD opens with its ${got} layers`);
+    check(back.some((l) => l.type === 'text'), 'text comes back from the PSD as editable text');
   });
 
   await step('CMYK TIFF export', async () => {
@@ -242,6 +521,8 @@ try {
 
   await step('send the export to a friend (second context)', async () => {
     await openApp(b, base);
+    // a name given before, so joining does not ask for one
+    await b.evaluate(() => (window.pixelotter.S.settings.name = 'Bea'));
     await a.click('[data-action="export"]');
     await a.selectOption('[data-field="format"]', 'png');
     await a.waitForTimeout(400);

@@ -727,6 +727,11 @@ export function installDialogs(ctx) {
       const target = { layer: l, size: { w: l.w, h: l.h }, mask: false };
       const region = { x: 0, y: 0, w: l.w, h: l.h };
       const mask = app.selectionInLayer(target, region);
+      // the fill comes from the pixels around the hole: some must stay unselected
+      if (!mask || mask.every((v) => v >= 128)) {
+        ctx.toast(t('toast.needSource'), 'warning');
+        return;
+      }
       const before = edoc.assets.read(l.asset);
       const out = contentAwareFill(before, l.w, l.h, mask, { patch: S.dlg.content.patch ?? 7 });
       edoc.commit(t('cmd.edit.contentAware'), [patchOp(l.asset, region, out), { t: 'sel', data: null }], { icon: 'heal' });
@@ -839,6 +844,9 @@ export function installDialogs(ctx) {
   };
   globals.saveSettings = () => {
     ctx.saveLocal();
+    // friends in a live session see a new name or color at once
+    const live = app.live;
+    if (live?.session && S.settings.name.trim()) live.session.presence?.({ name: S.settings.name.trim(), color: S.settings.color, ...live.localPresence() });
     // a new microphone or noise mode applies to a running call right away
     if (app.live?.call.inCall) app.live.call.setInput(undefined, app.live.mediaLinks());
     if (S.micTest) globals.micTest();
@@ -874,7 +882,8 @@ export function installDialogs(ctx) {
         .filter((r) => r.c?.key)
         .map((r) => ({ id: r.id, label: t(`cmd.${r.id}`), key: keyLabel(r.c.key.split(' | ')[0]) })),
     })).filter((s) => s.rows.length);
-    sections.push({ title: 'menu.tools', rows: [...app.tools.values()].filter((x) => x.key).map((x) => ({ id: x.id, label: t(`tool.${x.id}`), key: x.key.toUpperCase() })) });
+    // tool letters come from the toolbox groups (Shift and the letter cycles a group)
+    sections.push({ title: 'menu.tools', rows: S.toolGroups.flatMap((g) => g.tools.map((id) => ({ id, label: t(`tool.${id}`), key: g.tools.length > 1 ? `${g.key.toUpperCase()}, Shift+${g.key.toUpperCase()}` : g.key.toUpperCase() }))) });
     S.shortcutList = sections;
     ui.openDialog('dlg-shortcuts');
   };

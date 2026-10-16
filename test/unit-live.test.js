@@ -289,6 +289,37 @@ describe('live session', () => {
     await until(() => seen.length === 1);
     expect(seen[0]).toMatchObject({ from: 'g1', x: 12, y: 34 });
   });
+
+  it('presence carries the tool, its size, the activity and the layer, and nothing more', async () => {
+    const { hs, list } = session(2);
+    await join(hs, list[0], 'Bo');
+    await join(hs, list[1], 'Cy');
+    const seen = [];
+    list[1].gs.on('cursor', (c) => seen.push(c));
+    list[0].gs.cursor(5, 6, null, 'brush', { size: 40, act: 'painting', layer: 'bg', junk: 'x'.repeat(5000), arg: 'y'.repeat(99) });
+    await until(() => seen.length === 1);
+    expect(seen[0]).toMatchObject({ from: 'g1', tool: 'brush', size: 40, act: 'painting', layer: 'bg' });
+    expect(seen[0].junk).toBeUndefined();
+    expect(seen[0].arg.length).toBe(40);
+  });
+
+  it('a new name and color reach everyone, a taken color is refused, and selections are capped', async () => {
+    const { hs, list } = session(2);
+    await join(hs, list[0], 'Bo');
+    await join(hs, list[1], 'Cy');
+    const sels = [];
+    list[1].gs.on('presence', (p) => sels.push(p));
+    const big = Array.from({ length: 3000 }, (_, i) => i);
+    list[0].gs.presence({ name: 'Bia', color: '#123456', sel: [big], mic: true });
+    await until(() => sels.length === 1 && list[1].gs.peers.get('g1')?.name === 'Bia');
+    expect(list[1].gs.peers.get('g1').color).toBe('#123456');
+    expect(sels[0]).toMatchObject({ from: 'g1', mic: true, cam: false });
+    expect(sels[0].sel[0].length).toBe(1600);
+    // the host already wears the first color: a guest cannot take it
+    list[1].gs.presence({ color: hs.peers.get('host').color });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(hs.peers.get('g2').color).not.toBe(hs.peers.get('host').color);
+  });
 });
 
 function applyAndReturn(engine, ops) {
