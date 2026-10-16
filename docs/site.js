@@ -3,8 +3,8 @@
 // helpers the markup uses on V.config.globals and then calls V.start().
 //   at(event, el)  the before and after slider position under the pointer, in percent
 //   sweep(state)   one slow sweep of the slider when the page opens (skipped for reduced motion)
-// Scrolling moves the prints at different depths (parallax) and develops the contact sheet
-// frames as they come into view. Everything stops for people who prefer reduced motion.
+// The hero print develops under the enlarger, and the contact sheet frames develop as they
+// come into view. Everything stops for people who prefer reduced motion.
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -28,21 +28,16 @@ function sweep(state) {
   requestAnimationFrame(frame);
 }
 
-// Parallax: one custom property per frame, read by CSS transforms.
-const tray = document.querySelector('[data-tray]');
-if (tray && !reduced) {
-  let queued = false;
-  const update = () => {
-    queued = false;
-    tray.style.setProperty('--scroll', String(Math.min(window.scrollY, window.innerHeight * 1.5)));
-  };
-  window.addEventListener('scroll', () => {
-    if (!queued) {
-      queued = true;
-      requestAnimationFrame(update);
-    }
-  }, { passive: true });
-}
+// The hero print develops in the tray once on load; the round button develops it again.
+const print = document.querySelector('.hero-print');
+document.querySelector('[data-redevelop]')?.addEventListener('click', () => {
+  if (!print || reduced) return;
+  const img = print.querySelector('img');
+  img.style.animation = 'none';
+  void img.offsetWidth; // restart the animation
+  img.style.animation = '';
+  print.classList.toggle('again');
+});
 
 // Contact sheet frames develop as they scroll into view.
 const frames = [...document.querySelectorAll('.frame')];

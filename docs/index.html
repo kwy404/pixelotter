@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark light">
 <script>(function(){try{var t=localStorage.getItem('voodoo:theme');if(t&&t.charAt(0)==='"')t=JSON.parse(t);var r=document.documentElement;if(t==='light'||t==='dark'){r.setAttribute('data-theme',t);r.style.colorScheme=t}else{r.removeAttribute('data-theme')}}catch(e){}})();</script>
 <title>pixelotter: a photo editor in your browser</title>
-<meta name="description" content="A layered photo editor that runs offline in your browser: adjustments, masks, background removal, stickers, text and live editing with friends, peer to peer. Nothing is uploaded.">
+<meta name="description" content="A layered photo editor that runs offline in your browser: selections, masks, filters, PSD and TIFF files, and live editing with friends over chat, voice and video, peer to peer. Nothing is uploaded.">
 <link rel="canonical" href="https://kwy404.github.io/pixelotter/">
 <meta name="author" content="Alexandre Kohler">
 <meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="pixelotter">
 <meta property="og:title" content="pixelotter: a photo editor in your browser">
-<meta property="og:description" content="Layers, masks, cutouts, stickers and live editing with friends. Runs offline, nothing is uploaded.">
+<meta property="og:description" content="Layers, selections, filters, PSD and TIFF, and live editing with friends. Runs offline, nothing is uploaded.">
 <meta property="og:url" content="https://kwy404.github.io/pixelotter/">
 <meta property="og:image" content="https://kwy404.github.io/pixelotter/og.png">
 <meta property="og:image:width" content="1200">
@@ -35,7 +35,6 @@
 
 <div class="room" aria-hidden="true">
   <div class="grid-lines"></div>
-  <div class="leak leak-a"></div>
   <div class="leak leak-b"></div>
   <div class="leak leak-c"></div>
   <div class="grain"></div>
@@ -48,7 +47,8 @@
   </a>
   <nav class="bar-nav" aria-label="Sections">
     <a href="#sheet">Features</a>
-    <a href="#send">Sending</a>
+    <a href="#invite">Invites</a>
+    <a href="#room">Together</a>
     <a href="#limits">Limits</a>
   </nav>
   <div class="bar-end">
@@ -62,72 +62,140 @@
 </header>
 
 <main id="main">
-  <section class="hero" id="top" data-hero>
-    <div class="hero-copy">
-      <p class="eyebrow">Frame 01 <span>/</span> the darkroom</p>
-      <h1>Develop your photos <em>in the browser.</em></h1>
-      <p class="lede">A layered photo editor that works offline on your own device. Cut out a subject, make a sticker, edit with friends. Nothing is uploaded.</p>
+  <section class="stage" id="top" aria-labelledby="hero-title" data-stage>
+    <div class="enlarger" aria-hidden="true">
+      <svg class="enlarger-art" viewBox="0 0 260 250" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="enl-metal" x1="0" x2="1"><stop offset="0" stop-color="#1b1b1e"/><stop offset=".45" stop-color="#34343a"/><stop offset=".7" stop-color="#2a2a2f"/><stop offset="1" stop-color="#141416"/></linearGradient>
+          <linearGradient id="enl-head" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3a40"/><stop offset="1" stop-color="#1c1c20"/></linearGradient>
+          <linearGradient id="enl-bellows" x1="0" x2="1"><stop offset="0" stop-color="#121214"/><stop offset=".5" stop-color="#26262b"/><stop offset="1" stop-color="#121214"/></linearGradient>
+          <radialGradient id="enl-glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff1d6"/><stop offset=".35" stop-color="#f4c98e" stop-opacity=".85"/><stop offset="1" stop-color="#c08a4e" stop-opacity="0"/></radialGradient>
+        </defs>
+        <rect x="182" y="-10" width="16" height="200" rx="3" fill="url(#enl-metal)"/>
+        <rect x="185" y="-10" width="2" height="200" fill="#4a4a52" opacity=".6"/>
+        <rect x="150" y="60" width="52" height="16" rx="4" fill="#26262b"/>
+        <circle cx="190" cy="68" r="5" fill="#141416" stroke="#4a4a52"/>
+        <path d="M190 68l18 0" stroke="#3a3a41" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="212" cy="68" r="5" fill="#26262b" stroke="#4a4a52"/>
+        <rect x="56" y="34" width="112" height="62" rx="12" fill="url(#enl-head)" stroke="#45454d" stroke-width="1"/>
+        <rect x="64" y="40" width="96" height="6" rx="3" fill="#ffffff" opacity=".05"/>
+        <g stroke="#141416" stroke-width="3" stroke-linecap="round"><path d="M74 56h46M74 64h46M74 72h46"/></g>
+        <circle cx="146" cy="58" r="3.2" fill="#c08a4e"/>
+        <circle cx="146" cy="58" r="7" fill="#c08a4e" opacity=".18"/>
+        <rect x="66" y="94" width="92" height="10" rx="2" fill="#1a1a1d"/>
+        <path d="M72 104h80l-8 52H80z" fill="url(#enl-bellows)"/>
+        <g stroke="#3a3a41" stroke-width="1.2"><path d="M73 112h78M74 120h76M75 128h74M76 136h72M77 144h70M78 151h68"/></g>
+        <rect x="76" y="156" width="72" height="9" rx="2" fill="#2b2b30"/>
+        <rect x="96" y="165" width="32" height="26" rx="4" fill="#1d1d21" stroke="#3d3d44"/>
+        <path d="M96 172h32M96 180h32" stroke="#3d3d44"/>
+        <rect x="100" y="190" width="24" height="10" rx="3" fill="#111113"/>
+        <ellipse cx="112" cy="201" rx="11" ry="3.4" fill="#ffe8c4"/>
+        <circle class="enl-glow" cx="112" cy="204" r="34" fill="url(#enl-glow)"/>
+      </svg>
+    </div>
+    <div class="beam" aria-hidden="true"><div class="cone"></div><div class="motes"><i style="--x:44%;--t:13s;--d:0s;--s:2px"></i><i style="--x:52%;--t:17s;--d:-4s;--s:3px"></i><i style="--x:48%;--t:11s;--d:-7s;--s:2px"></i><i style="--x:57%;--t:15s;--d:-2s;--s:2px"></i><i style="--x:40%;--t:19s;--d:-9s;--s:3px"></i><i style="--x:61%;--t:14s;--d:-5s;--s:2px"></i><i style="--x:46%;--t:21s;--d:-12s;--s:2px"></i><i style="--x:55%;--t:12s;--d:-3s;--s:3px"></i><i style="--x:36%;--t:16s;--d:-8s;--s:2px"></i><i style="--x:65%;--t:18s;--d:-11s;--s:2px"></i><i style="--x:50%;--t:23s;--d:-6s;--s:2px"></i><i style="--x:43%;--t:14s;--d:-10s;--s:3px"></i></div></div>
+
+    <div class="stage-copy">
+      <p class="eyebrow">Frame 01 <span>/</span> under the enlarger</p>
+      <h1 id="hero-title">Develop your photos <em>in the browser.</em></h1>
+      <p class="lede">A layered photo editor that works offline on your own device, with selections, filters, PSD and TIFF files. Invite friends with six words and edit together while you talk. Nothing is uploaded.</p>
       <div class="cta">
         <a class="btn btn-primary btn-lg" href="app/">Open the editor</a>
-        <a class="btn btn-ghost btn-lg" href="app/#quick">Make a sticker</a>
+        <a class="btn btn-ghost btn-lg" href="app/#quick">Quick mode</a>
       </div>
-      <p class="meta">Free and open source. No account. Works in current desktop and phone browsers.</p>
+      <p class="meta">Free and open source. No account. Current desktop and phone browsers.</p>
     </div>
 
-    <div class="tray" data-tray>
-      <div class="liquid"></div>
-      <div class="ripples"><i></i><i></i><i></i></div>
-      <figure class="print floater develop" style="--d:.22;--x:-6%;--y:6%;--r:-9deg;--w:30%;--delay:0s"><img src="assets/prints/seascape.jpg" width="600" height="450" alt="A print of a quiet seascape at dusk, developing"></figure>
-      <figure class="print floater develop" style="--d:.5;--x:70%;--y:-4%;--r:7deg;--w:24%;--delay:2.4s"><img src="assets/prints/portrait.jpg" width="480" height="480" alt="A print of Otto the otter in his beret, developing"></figure>
-      <figure class="print floater develop" style="--d:.34;--x:-2%;--y:64%;--r:-5deg;--w:26%;--delay:4.8s"><img src="assets/prints/teapot.jpg" width="600" height="450" alt="A print of a teapot on a window sill, developing"></figure>
-
-      <figure class="print keeper" data-depth=".12">
-        <div class="ba" v-data="{ pos: 40, dragging: false }" v-init="sweep($data)" :style="{ '--pos': pos + '%' }" @pointerdown="dragging = true; pos = at($event, $el)" @pointermove="dragging && (pos = at($event, $el))" @pointerup="dragging = false" @pointercancel="dragging = false" @pointerleave="dragging = false">
-          <img class="ba-before" src="assets/sample/before.jpg" width="1200" height="900" alt="Before: an illustrated sample photo of a felt otter figurine on a darkroom table" draggable="false">
-          <div class="ba-after"><img src="assets/sample/after.png" width="1200" height="900" alt="After: the same figurine cut out by the in-browser model, on a plain backdrop" draggable="false"></div>
-          <div class="ba-line"><span class="ba-knob" role="slider" tabindex="0" aria-label="Compare before and after background removal" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(pos)" aria-valuenow="40" @keydown.left.prevent="pos = Math.max(0, pos - 4)" @keydown.right.prevent="pos = Math.min(100, pos + 4)" @keydown.home.prevent="pos = 0" @keydown.end.prevent="pos = 100"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-flip"/></svg></span></div>
-          <span class="ba-tag ba-tag-l">Before</span>
-          <span class="ba-tag ba-tag-r">After</span>
+    <div class="bath" data-bath>
+      <div class="tray-wrap">
+        <div class="tray">
+          <div class="chem" aria-hidden="true"></div>
+          <figure class="print hero-print">
+            <img src="assets/sample/before.jpg" width="1200" height="900" alt="A print of a felt otter figurine on a darkroom table, developing in the tray under the enlarger light">
+          </figure>
+          <div class="ripples" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="pool" aria-hidden="true"></div>
         </div>
-        <figcaption><span class="mono">14A</span> Real output of the in-browser cutout model on an illustrated sample.</figcaption>
-      </figure>
-
-      <img class="otto" data-depth=".3" src="assets/art/otto-dark.svg" width="520" height="660" alt="Otto the otter painter raises his brush, painting light onto the print">
+      </div>
+      <img class="otto" src="assets/art/otto-dark.svg" width="520" height="660" alt="Otto the otter painter waits by the tray with his brush">
+      <button type="button" class="redevelop" data-redevelop aria-label="Develop the print again" title="Develop again"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-rotate"/></svg></button>
     </div>
-    <p class="scroll-hint" aria-hidden="true"><span></span>Scroll</p>
   </section>
 
   <section class="sheet" id="sheet" aria-labelledby="sheet-title">
     <div class="sec-head">
-      <p class="eyebrow">Contact sheet <span>/</span> 6 frames</p>
+      <p class="eyebrow">Contact sheet <span>/</span> 9 frames</p>
       <h2 id="sheet-title">Everything a darkroom had. Plus layers.</h2>
+      <p class="sub">A workspace with a menu bar, an options bar, a tool strip, docked panels and document tabs, and a Quick mode for one tap edits.</p>
     </div>
     <ol class="strip">
-      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-layers"/></svg><h3>Layers and masks</h3><p>Groups, blend modes, opacity, layer masks and adjustment layers.</p><span class="num">12A</span></li>
-      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-adjust"/></svg><h3>Tone and looks</h3><p>Levels, curves, color, sharpen and blur, one tap looks and auto enhance.</p><span class="num">13A</span></li>
-      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-cutout"/></svg><h3>Remove background</h3><p>An open license model runs on your device, with a refine brush and feathered edges.</p><span class="num">14A</span></li>
-      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-sticker"/></svg><h3>Sticker maker</h3><p>Outline, caption and a 512 px WebP under 100 kB, ready for your messenger.</p><span class="num">15A</span></li>
-      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-text-path"/></svg><h3>Text that sits right</h3><p>Font presets, outline, shadow, curved text and speech bubbles.</p><span class="num">16A</span></li>
-      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-collaborate"/></svg><h3>Edit together</h3><p>Up to five friends on one document, each with a cursor and a layer of their own.</p><span class="num">17A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-layers"/></svg><h3>Layers and masks</h3><p>Groups, blend modes, opacity, layer masks, clipping, adjustment and fill layers, layer styles.</p><span class="num">12A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-wand"/></svg><h3>Selections</h3><p>Marquee, lasso, polygon lasso, magic wand and quick select, with feather, expand, contract and channels as selections.</p><span class="num">13A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-brush"/></svg><h3>Tools</h3><p>Brush, eraser, clone, heal, dodge and burn, gradient, text, shapes, pen, crop and free transform.</p><span class="num">14A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-adjust"/></svg><h3>Filters, levels and curves</h3><p>A filter library with blur, sharpen, noise, distort and stylize groups, liquify and content aware fill.</p><span class="num">15A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-file"/></svg><h3>Real files</h3><p>Layered PSD in and out, TIFF, PNG, JPEG, WebP, AVIF where the browser can, GIF, BMP and the .pxo project.</p><span class="num">16A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-cmyk"/></svg><h3>Soft proof for print</h3><p>An approximate CMYK preview, a gamut warning and CMYK TIFF export, from a generic press model.</p><span class="num">17A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-history"/></svg><h3>History</h3><p>Unlimited undo with a history panel, autosave in this browser and recovery after a crash.</p><span class="num">18A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-cutout"/></svg><h3>Remove background</h3><p>An open license model runs on your device, with a refine brush and feathered edges.</p><span class="num">19A</span></li>
+      <li class="frame"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-collaborate"/></svg><h3>Edit together</h3><p>Up to five friends on one document, with live cursors, per layer locks and view or edit roles.</p><span class="num">20A</span></li>
     </ol>
   </section>
 
-  <section class="send" id="send" aria-labelledby="send-title">
+  <section class="cutout" aria-labelledby="cutout-title">
     <div class="sec-head">
-      <p class="eyebrow">Frame 18A <span>/</span> passing a print</p>
-      <h2 id="send-title">Send it to a friend, in full quality.</h2>
-      <p class="sub">Straight from your browser to theirs. No upload, no account, no recompression.</p>
+      <p class="eyebrow">Frame 21A <span>/</span> a clean cut</p>
+      <h2 id="cutout-title">Lift the subject off the table.</h2>
+      <p class="sub">Drag the line to compare. The cutout runs in your browser and leaves a mask you can paint on.</p>
+    </div>
+    <figure class="print keeper">
+      <div class="ba" v-data="{ pos: 40, dragging: false }" v-init="sweep($data)" :style="{ '--pos': pos + '%' }" @pointerdown="dragging = true; pos = at($event, $el)" @pointermove="dragging && (pos = at($event, $el))" @pointerup="dragging = false" @pointercancel="dragging = false" @pointerleave="dragging = false">
+        <img class="ba-before" src="assets/sample/before.jpg" width="1200" height="900" alt="Before: an illustrated sample photo of a felt otter figurine on a darkroom table" draggable="false" loading="lazy">
+        <div class="ba-after"><img src="assets/sample/after.png" width="1200" height="900" alt="After: the same figurine cut out by the in-browser model, on a plain backdrop" draggable="false" loading="lazy"></div>
+        <div class="ba-line"><span class="ba-knob" role="slider" tabindex="0" aria-label="Compare before and after background removal" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(pos)" aria-valuenow="40" @keydown.left.prevent="pos = Math.max(0, pos - 4)" @keydown.right.prevent="pos = Math.min(100, pos + 4)" @keydown.home.prevent="pos = 0" @keydown.end.prevent="pos = 100"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-flip"/></svg></span></div>
+        <span class="ba-tag ba-tag-l">Before</span>
+        <span class="ba-tag ba-tag-r">After</span>
+      </div>
+      <figcaption><span class="mono">21A</span> Real output of the in-browser cutout model on an illustrated sample.</figcaption>
+    </figure>
+  </section>
+
+  <section class="send" id="invite" aria-labelledby="invite-title">
+    <div class="sec-head">
+      <p class="eyebrow">Frame 22A <span>/</span> passing a print</p>
+      <h2 id="invite-title">Three ways in. The same six words.</h2>
+      <p class="sub">Open a room and your friends join from any device. No account, no server of ours, nothing to install.</p>
     </div>
     <ol class="steps">
-      <li><span class="step-n">1</span><h3>Six words and a QR code</h3><p>Read the words out or let a phone camera scan the code.</p>
+      <li><span class="step-n"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-words"/></svg></span><h3>Six words</h3><p>Read them out or paste them anywhere. The first four letters of each are enough.</p>
         <div class="words" aria-label="Example words"><span>amber</span><span>otter</span><span>paper</span><span>river</span><span>silver</span><span>velvet</span></div></li>
-      <li><span class="step-n">2</span><h3>Confirm with six more</h3><p>Both screens show the same confirmation words, so nobody can slip in between.</p></li>
-      <li><span class="step-n">3</span><h3>Untouched and verified</h3><p>The exact bytes arrive and are checked with SHA-256 before you can save them.</p><p class="hash mono">sha256 match</p></li>
+      <li><span class="step-n"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-qr"/></svg></span><h3>A QR code</h3><p>A phone camera opens the room straight away.</p></li>
+      <li><span class="step-n"><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-link"/></svg></span><h3>A link with a Copy button</h3><p>The words ride after the # sign, which browsers never send to any server.</p><p class="hash mono">app/#join=amber-otter-paper-river-silver-velvet</p></li>
     </ol>
     <picture class="send-art">
       <source srcset="assets/art/passing.svg" media="(prefers-color-scheme: light)">
-      <img src="assets/art/passing-dark.svg" width="960" height="640" alt="Two devices pass a print: six word tiles and a QR code on one, the print arriving with a matching hash on the other" loading="lazy">
+      <img src="assets/art/passing-dark.svg" width="960" height="640" alt="Two devices pass a print: six word tiles and a QR code on one, the print arriving on the other" loading="lazy">
     </picture>
+  </section>
+
+  <section class="room-sec" id="room" aria-labelledby="room-title">
+    <div class="sec-head">
+      <p class="eyebrow">Frame 23A <span>/</span> the whole crew</p>
+      <h2 id="room-title">Talk while you edit.</h2>
+      <p class="sub">Everyone in the room gets the same tools, straight between browsers and encrypted by WebRTC.</p>
+    </div>
+    <div class="room-grid">
+      <picture class="room-art">
+        <source srcset="assets/art/together.svg" media="(prefers-color-scheme: light)">
+        <img src="assets/art/together-dark.svg" width="960" height="640" alt="Otto and two friends gather around one print, each with a cursor of their own" loading="lazy">
+      </picture>
+      <ul class="room-list">
+        <li><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-chat"/></svg><div><h3>Chat</h3><p>Replies, reactions and pasted pictures.</p></div></li>
+        <li><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-mic"/></svg><div><h3>Voice with noise suppression</h3><p>The browser cleanup plus our own filter for fans, keys and hum. Mute any time.</p></div></li>
+        <li><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-camera"/></svg><div><h3>Camera</h3><p>Turn it on or off, and pick the microphone, camera and speaker you want.</p></div></li>
+        <li><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-desktop"/></svg><div><h3>Screen share</h3><p>Show a reference or another window to the room.</p></div></li>
+        <li><svg class="ic" aria-hidden="true"><use href="assets/icons.svg#i-shield"/></svg><div><h3>Safety words</h3><p>Each connection shows six words on both screens. When they match, nobody sits in the middle.</p></div></li>
+      </ul>
+    </div>
   </section>
 
   <section class="limits" id="limits" aria-labelledby="limits-title">
@@ -136,11 +204,12 @@
       <h2 id="limits-title">Honest limits.</h2>
     </div>
     <ul class="limit-list">
+      <li>Printing colors are an approximation: the CMYK preview and CMYK TIFF come from a generic coated press model, with no ICC color engine.</li>
+      <li>PSD files open with their layers, masks and blend modes. Smart objects, vector shapes and live type from other apps open as pixels.</li>
+      <li>AVIF and WebP export depend on the browser. The app tells you when it cannot encode a format.</li>
       <li>The cutout model and its runtime download once, about 16 MB, then work offline.</li>
-      <li>Large photos can be slow on older phones. The editor previews at screen size and renders full size on export.</li>
-      <li>Some browsers cannot encode WebP from a canvas. The app tells you and offers PNG instead.</li>
-      <li>Peer to peer can fail on very strict networks. You can add your own TURN server in Settings.</li>
-      <li>Printing colors are an approximation: the CMYK mode simulates a generic coated press, not your print shop.</li>
+      <li>A room holds up to five friends. Voice and video run in a full mesh, so many cameras at once need a good connection.</li>
+      <li>Peer to peer can fail on very strict networks. You can add your own TURN server in Settings. Screen sharing needs a desktop browser.</li>
     </ul>
     <p class="cta center"><a class="btn btn-primary btn-lg" href="app/">Open the editor</a></p>
   </section>
