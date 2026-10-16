@@ -24,7 +24,7 @@ let words = [];
 let link = '';
 try {
   await step('host opens a room', async () => {
-    await Promise.all(all.map((p) => openApp(p, base)));
+    for (const p of all) await openApp(p, base);
     for (const [p, n] of [[a, 'Ana'], [b, 'Bia'], [c, 'Caio'], [d, 'Duda']]) await setName(p, n);
     await openSample(a);
     await a.click('[data-action="share"]');
@@ -65,13 +65,13 @@ try {
   });
 
   await step('friend one opens the invite link', async () => {
-    await b.goto(link);
+    await b.goto(link, { waitUntil: 'domcontentloaded', timeout: 120000 });
     await waitLive(b);
     check(!(await b.evaluate(() => location.hash)), 'the words are cleared from the address bar');
   });
 
   await step('friend two scans the QR code', async () => {
-    await c.goto(qrText || link);
+    await c.goto(qrText || link, { waitUntil: 'domcontentloaded', timeout: 120000 });
     await waitLive(c);
   });
 
@@ -133,13 +133,17 @@ try {
       window.pixelotter.ctx.ui.openPanel('live');
       window.pixelotter.S.liveTab = 'chat';
     });
-    await d.locator('[data-msg]', { hasText: 'hi all' }).first().click({ button: 'right' });
+    const msg = d.locator('[data-msg]', { hasText: 'hi all' }).first();
+    await msg.scrollIntoViewIfNeeded();
+    await msg.click({ button: 'right' });
+    await d.waitForSelector('.ctx-menu', { timeout: 15000 });
     const items = await d.locator('.ctx-menu [role^="menuitem"]').allInnerTexts();
     check(items.some((x) => x.includes('Reply')) && items.some((x) => x.includes('React')), 'a chat message has its own menu');
     await d.locator('.ctx-menu .ctx-item', { hasText: 'Reply' }).click();
     check(!!(await d.evaluate(() => window.pixelotter.S.replyTo)), 'Reply from the menu');
     await d.evaluate(() => (window.pixelotter.S.liveTab = 'people'));
     await d.locator('[data-peer]', { hasText: 'Ana' }).first().click({ button: 'right' });
+    await d.waitForSelector('.ctx-menu', { timeout: 15000 });
     const peerItems = await d.locator('.ctx-menu [role^="menuitem"]').allInnerTexts();
     check(peerItems.some((x) => x.includes('Follow')), 'a person in the room has a menu');
     await d.keyboard.press('Escape');

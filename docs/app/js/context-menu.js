@@ -16,7 +16,11 @@ export class ContextMenu {
     this.onOutside = (e) => {
       if (!this.levels.some((l) => l.el.contains(e.target))) this.close();
     };
-    this.onAway = () => this.close();
+    this.onAway = (e) => {
+      // a scroll inside the menu, or the one that brought the target into view, keeps it open
+      if (e?.type === 'scroll' && (performance.now() - this.openedAt < 400 || this.levels.some((l) => l.el.contains(e.target)))) return;
+      this.close();
+    };
   }
 
   get isOpen() {

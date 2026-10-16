@@ -26,9 +26,9 @@ export function installContext(ctx) {
     }
     items.push(cmd('edit.undo'), cmd('edit.redo'), '-', cmd('edit.cut'), cmd('edit.copy'), cmd('edit.copyMerged'), cmd('edit.paste'), '-');
     if (hasSel) {
-      items.push(cmd('select.none'), cmd('select.inverse'), cmd('select.reselect'), sub(t('menu.select.modify'), [cmd('select.feather'), cmd('select.expand'), cmd('select.contract')]), cmd('select.refine'), '-', cmd('layer.viaCopy'), cmd('layer.viaCut'), cmd('edit.fill'), cmd('edit.stroke'), cmd('edit.contentAware'), cmd('select.toMask'), cmd('edit.clear'));
+      items.push(cmd('select.none', { label: t('ctx.deselect') }), cmd('select.inverse', { label: t('ctx.inverse') }), cmd('select.reselect'), sub(t('menu.select.modify'), [cmd('select.feather'), cmd('select.expand'), cmd('select.contract')]), cmd('select.refine'), '-', cmd('layer.viaCopy'), cmd('layer.viaCut'), cmd('edit.fill'), cmd('edit.stroke'), cmd('edit.contentAware'), cmd('select.toMask'), cmd('edit.clear'));
     } else {
-      items.push(cmd('select.all'), cmd('select.reselect'), cmd('select.subject'));
+      items.push(cmd('select.all', { label: t('ctx.selectAll') }), cmd('select.reselect'), cmd('select.subject', { label: t('ctx.selectSubject') }));
       if (SELECT.has(tool)) items.push(cmd('select.colorRange'));
       items.push('-', cmd('edit.fill'));
     }

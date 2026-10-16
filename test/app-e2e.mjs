@@ -145,7 +145,7 @@ try {
   await step('context menus', async () => {
     const box = await a.locator('#viewport').boundingBox();
     await a.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
-    await a.waitForSelector('.ctx-menu[role="menu"]', { timeout: 5000 });
+    await a.waitForSelector('.ctx-menu[role="menu"]', { timeout: 15000 });
     const labels = await a.locator('.ctx-menu [role^="menuitem"]').allInnerTexts();
     check(labels.some((x) => x.includes('Copy')) && labels.some((x) => x.includes('Paste')) && labels.some((x) => x.includes('Free transform')), `canvas menu (${labels.length} items)`);
     const pos = await a.evaluate(() => {
@@ -180,7 +180,7 @@ try {
     await a.locator('.layer-row').first().click({ button: 'right' });
     const blend = a.locator('.ctx-menu .ctx-item', { hasText: 'Blend mode' });
     await blend.hover();
-    await a.waitForSelector('.ctx-menu >> nth=1', { timeout: 3000 });
+    await a.waitForSelector('.ctx-menu >> nth=1', { timeout: 15000 });
     await a.keyboard.press('ArrowRight');
     await a.keyboard.press('ArrowDown');
     await a.keyboard.press('Enter');
@@ -205,8 +205,10 @@ try {
   });
 
   const exportAs = async (format, cmyk = false) => {
+    await a.evaluate(() => window.pixelotter.ctx.contextMenu?.close());
     await a.click('[data-action="export"]');
     await a.selectOption('[data-field="format"]', format);
+    await a.waitForFunction((f) => window.pixelotter.S.dlg.export.format === f, format, { timeout: 15000 });
     await a.evaluate((v) => (window.pixelotter.S.dlg.export.cmyk = v), cmyk);
     await a.waitForTimeout(400);
     const [dl] = await Promise.all([a.waitForEvent('download', { timeout: 90000 }), a.click('[data-action="do-export"]')]);

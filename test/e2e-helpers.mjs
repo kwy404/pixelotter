@@ -58,7 +58,11 @@ export async function launch({ width = 1440, height = 900, locale = 'en-US', col
   });
   const page = ctx.pages()[0] ?? (await ctx.newPage());
   const errors = [];
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  // The browser itself logs a failed WebSocket to a public relay (one of several the pairing
+  // uses at once) or an aborted network fetch as a console error; those are network
+  // conditions, not errors in the app, so they are left out.
+  const network = /^WebSocket connection to 'wss:\/\/|^Failed to load resource: net::ERR_(SOCKET_NOT_CONNECTED|CONNECTION_|NAME_NOT_RESOLVED|TIMED_OUT|INTERNET_DISCONNECTED)/;
+  page.on('console', (m) => m.type() === 'error' && !network.test(m.text()) && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(`${e.message}\n${e.stack}`));
   return { ctx, page, errors };
 }
@@ -75,8 +79,9 @@ export async function closeAll(...ctxs) {
 }
 
 export async function openApp(page, base) {
-  await page.goto(`${base}app/`);
-  await page.waitForFunction(() => window.pixelotter?.S?.ready, null, { timeout: 90000 });
+  // the editor is usable before every font and CDN file has arrived, so do not wait for "load"
+  await page.goto(`${base}app/`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  await page.waitForFunction(() => window.pixelotter?.S?.ready, null, { timeout: 180000 });
 }
 
 export async function openSample(page) {

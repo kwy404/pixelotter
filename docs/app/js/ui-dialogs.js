@@ -176,7 +176,8 @@ export function installDialogs(ctx) {
   // ---------- export ----------
   S.exportFormats = WRITABLE.map((id) => ({ id, label: FORMATS[id].label }));
   let exportTimer = null;
-  let exportResult = null;
+  let exportResult = null; // { key, r }: the last full size encode, reused only for the same options
+  const exportKey = (e) => JSON.stringify([app.edoc?.uid, S.historyIndex, e.format, e.quality, e.scale, e.cmyk, e.animated, e.pages]);
   ui.exportDialog = (format = null) => {
     const f = format ?? (S.dlg.export.format || 'png');
     S.dlg.export = { ...S.dlg.export, format: f, quality: S.dlg.export.quality ?? 0.9, scale: 1, cmyk: app.edoc.doc.mode === 'cmyk', animated: app.edoc.doc.frames.length > 1, pages: false, error: '', note: '', sizeText: '', previewUrl: '' };
@@ -193,11 +194,13 @@ export function installDialogs(ctx) {
     if (!e.canCmyk) e.cmyk = false;
     e.note = e.format === 'psd' || e.format === 'psb' ? t('export.psdNote') : e.format === 'jpeg' && !app.edoc.doc.background ? t('export.jpegNote') : e.format === 'gif' ? t('export.gifNote') : '';
     e.busy = true;
+    exportResult = null;
     clearTimeout(exportTimer);
     exportTimer = setTimeout(measure, 250);
   };
   async function measure() {
     const e = S.dlg.export;
+    const key = exportKey(e);
     try {
       // the size preview encodes the real file at a small scale for big documents, then scales the estimate
       const d = app.edoc.doc;
@@ -214,7 +217,7 @@ export function installDialogs(ctx) {
         e.previewUrl = c.convertToBlob ? URL.createObjectURL(await c.convertToBlob()) : c.toDataURL();
       }
       e.error = '';
-      exportResult = probeScale === e.scale ? r : null;
+      exportResult = probeScale === e.scale ? { key, r } : null;
     } catch (err) {
       e.error = err.message;
       e.sizeText = '';
@@ -223,7 +226,7 @@ export function installDialogs(ctx) {
   }
   const buildExport = async () => {
     const e = S.dlg.export;
-    if (exportResult) return exportResult;
+    if (exportResult && exportResult.key === exportKey(e)) return exportResult.r;
     return exportDocument(app.edoc, { format: e.format, quality: e.quality, scale: e.scale, cmyk: e.cmyk, animated: e.animated, pages: e.pages, sizes: [16, 32, 48, 256] });
   };
   globals.doExport = async () => {
