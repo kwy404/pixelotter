@@ -6,15 +6,18 @@
 //   { t: 'remove', id }               delete a layer
 //   { t: 'move', id, index }          change the stacking order
 //   { t: 'set', id, props }           change layer properties (shallow merge)
-//   { t: 'doc', props }               change name, width, height or background
+//   { t: 'doc', props }               change name, size, background, mode, guides, frames, paths
 // Pixel operations ('asset', 'patch', 'replace') are applied by the asset store.
 
 import { BLEND_MODES } from './blend.js';
 import { normalizeAdjustments } from './filters/adjust.js';
+import { normalizeStyles } from './styles.js';
+import { normalizePath } from './paths.js';
 
 export const DOC_FORMAT = 'pixelotter';
 export const DOC_VERSION = 1;
-export const LAYER_TYPES = Object.freeze(['raster', 'text', 'shape', 'group', 'adjust']);
+export const LAYER_TYPES = Object.freeze(['raster', 'text', 'shape', 'group', 'adjust', 'fill']);
+export const COLOR_MODES = Object.freeze(['rgb', 'gray', 'cmyk']);
 export const MAX_SIDE = 12000;
 export const MAX_LAYERS = 500;
 
@@ -40,9 +43,26 @@ export function createDoc({ name = 'Untitled', width = 1080, height = 1080, back
     width: clamp(Math.round(num(width, 1080)), 1, MAX_SIDE),
     height: clamp(Math.round(num(height, 1080)), 1, MAX_SIDE),
     background: background === null ? null : color(background, '#ffffff'),
+    mode: 'rgb',
+    dpi: 72,
+    guides: [],
+    frames: [],
+    paths: [],
     layers: [],
   };
 }
+
+/** Guides: [{ axis: 'x' | 'y', pos }] in document pixels. */
+export const normalizeGuides = (list) =>
+  (Array.isArray(list) ? list.slice(0, 200) : []).filter((g) => (g?.axis === 'x' || g?.axis === 'y') && Number.isFinite(Number(g.pos))).map((g) => ({ axis: g.axis, pos: Number(g.pos) }));
+
+/** Animation frames: [{ id, delay (ms), show: [layer ids visible in this frame] }]. */
+export const normalizeFrames = (list) =>
+  (Array.isArray(list) ? list.slice(0, 500) : []).map((f) => ({
+    id: typeof f?.id === 'string' ? f.id.slice(0, 40) : newId('f'),
+    delay: clamp(Math.round(num(f?.delay, 100)), 10, 60000),
+    show: Array.isArray(f?.show) ? f.show.filter((x) => typeof x === 'string').slice(0, MAX_LAYERS) : [],
+  }));
 
 const BASE = { name: 'Layer', visible: true, locked: false, opacity: 1, fill: 1, blend: 'normal', parent: null, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, mask: null };
 
@@ -87,8 +107,12 @@ export function normalizeLayer(input) {
     mask: null,
   };
   if (input.mask && typeof input.mask.asset === 'string') {
-    l.mask = { asset: input.mask.asset, enabled: input.mask.enabled !== false, feather: clamp(num(input.mask.feather, 0), 0, 200), invert: input.mask.invert === true };
+    // raster layers keep their mask in their own pixels (it moves with them), others in the document
+    l.mask = { asset: input.mask.asset, enabled: input.mask.enabled !== false, feather: clamp(num(input.mask.feather, 0), 0, 200), invert: input.mask.invert === true, space: type === 'raster' ? 'layer' : 'doc' };
   }
+  if (input.styles && type !== 'adjust' && type !== 'group') l.styles = normalizeStyles(input.styles);
+  else l.styles = null;
+  l.clip = input.clip === true;
   if (type === 'raster') {
     l.asset = str(input.asset, null, 60);
     l.w = clamp(Math.round(num(input.w, 1)), 1, MAX_SIDE);
@@ -127,8 +151,20 @@ export function normalizeLayer(input) {
   } else if (type === 'group') {
     l.collapsed = input.collapsed === true;
   } else if (type === 'adjust') {
+    l.filter = str(input.filter, 'tone', 40);
+    l.params = input.params && typeof input.params === 'object' ? JSON.parse(JSON.stringify(input.params)) : {};
     l.adjust = normalizeAdjustments(input.adjust);
     l.look = str(input.look, 'none', 40);
+  } else if (type === 'fill') {
+    l.fillType = ['solid', 'gradient', 'pattern'].includes(input.fillType) ? input.fillType : 'solid';
+    l.color = color(input.color, '#c08a4e');
+    const g = input.gradient ?? {};
+    l.gradient = {
+      type: g.type === 'radial' ? 'radial' : 'linear',
+      angle: num(g.angle, 90),
+      stops: (Array.isArray(g.stops) && g.stops.length >= 2 ? g.stops : [{ at: 0, color: '#120d0a' }, { at: 1, color: '#c08a4e' }]).slice(0, 16).map((x) => ({ at: clamp(num(x.at, 0), 0, 1), color: color(x.color, '#000000') })),
+    };
+    l.pattern = { id: str(input.pattern?.id, 'grain', 40), scale: clamp(num(input.pattern?.scale, 1), 0.05, 20) };
   }
   return l;
 }
@@ -142,6 +178,11 @@ export function normalizeDoc(input) {
   if (!input || typeof input !== 'object' || input.format !== DOC_FORMAT) throw new Error('This is not a pixelotter document');
   if (!Number.isInteger(input.version) || input.version > DOC_VERSION) throw new Error('This document was made by a newer version of pixelotter');
   const doc = createDoc({ name: input.name, width: input.width, height: input.height, background: input.background === null ? null : input.background });
+  doc.mode = COLOR_MODES.includes(input.mode) ? input.mode : 'rgb';
+  doc.dpi = clamp(Math.round(num(input.dpi, 72)), 1, 4800);
+  doc.guides = normalizeGuides(input.guides);
+  doc.frames = normalizeFrames(input.frames);
+  doc.paths = (Array.isArray(input.paths) ? input.paths.slice(0, 200) : []).map(normalizePath);
   if (typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(input.id)) doc.id = input.id;
   const layers = Array.isArray(input.layers) ? input.layers.slice(0, MAX_LAYERS) : [];
   const seen = new Set();
@@ -212,7 +253,7 @@ export function layerTree(doc, parent = null) {
 
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
-const DOC_PROPS = ['name', 'width', 'height', 'background'];
+const DOC_PROPS = ['name', 'width', 'height', 'background', 'mode', 'dpi', 'guides', 'frames', 'paths'];
 
 /** Applies one JSON operation to a document in place. Throws on an invalid operation. */
 export function applyOp(doc, op) {
@@ -261,7 +302,12 @@ export function applyOp(doc, op) {
         height: 'height' in props ? props.height : doc.height,
         background: 'background' in props ? props.background : doc.background,
       });
-      for (const k of DOC_PROPS) doc[k] = next[k];
+      for (const k of ['name', 'width', 'height', 'background']) doc[k] = next[k];
+      if ('mode' in props) doc.mode = COLOR_MODES.includes(props.mode) ? props.mode : doc.mode;
+      if ('dpi' in props) doc.dpi = clamp(Math.round(num(props.dpi, doc.dpi)), 1, 4800);
+      if ('guides' in props) doc.guides = normalizeGuides(props.guides);
+      if ('frames' in props) doc.frames = normalizeFrames(props.frames);
+      if ('paths' in props) doc.paths = (Array.isArray(props.paths) ? props.paths.slice(0, 200) : []).map(normalizePath);
       return doc;
     }
     default:
@@ -292,7 +338,7 @@ export function invertOp(doc, op) {
     }
     case 'doc': {
       const props = {};
-      for (const k of Object.keys(op.props ?? {})) if (DOC_PROPS.includes(k)) props[k] = doc[k];
+      for (const k of Object.keys(op.props ?? {})) if (DOC_PROPS.includes(k)) props[k] = clone(doc[k]);
       return { t: 'doc', props };
     }
     default:
