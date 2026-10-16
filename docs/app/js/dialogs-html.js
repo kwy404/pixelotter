@@ -286,6 +286,7 @@ export const DIALOGS_HTML = `
         <label class="field"><span class="label">{ $t('settings.color') }</span><input type="color" .value="S.settings.color || '#d39b5c'" @input="S.settings.color = $event.target.value" data-field="settings-color"></label>
         <label class="field"><span class="label">{ $t('settings.language') }</span><select class="select select-sm" .value="S.lang" @change="setLanguage($event.target.value)"><option value="en">English</option><option value="pt-BR">Portugu&ecirc;s</option></select></label>
         <label class="opt"><input type="checkbox" class="checkbox checkbox-sm" v-model="S.settings.autosave">{ $t('settings.autosave') }</label>
+        <button type="button" class="btn btn-xs btn-soft" @click="closeDialog('dlg-settings'); run('edit.shortcuts')" data-action="edit-keys">{ $t('keys.edit') }</button>
         <label class="opt"><input type="checkbox" class="checkbox checkbox-sm" v-model="S.settings.preloadModel">{ $t('settings.preloadModel') }</label>
       </fieldset>
       <fieldset class="fieldset"><legend class="legend">{ $t('settings.network') }</legend>
@@ -312,7 +313,8 @@ export const DIALOGS_HTML = `
 <dialog id="dlg-shortcuts" class="modal" aria-labelledby="dlg-sc-title">
   <div class="modal-box modal-lg">
     <div class="modal-header"><h2 id="dlg-sc-title" class="modal-title">{ $t('shortcuts.title') }</h2></div>${close('dlg-shortcuts')}
-    <div class="shortcut-cols"><dl v-for="sec in S.shortcutList" :key="sec.title"><dt class="sc-head">{ $t(sec.title) }</dt><div class="sc-row" v-for="r in sec.rows" :key="r.id"><dt>{ r.label }</dt><dd><kbd class="kbd kbd-sm">{ r.key }</kbd></dd></div></dl></div>
+    <p class="hint">{ $t('keys.editHint') } <button type="button" class="btn btn-xs btn-ghost" @click="resetKeys()" data-action="reset-keys">{ $t('keys.reset') }</button></p>
+    <div class="shortcut-cols"><dl v-for="sec in S.shortcutList" :key="sec.title"><dt class="sc-head">{ $t(sec.title) }</dt><div class="sc-row" v-for="r in sec.rows" :key="r.id" :class="{ recording: S.keyRecording === r.id }"><dt>{ r.label }</dt><dd><kbd class="kbd kbd-sm" v-show="r.key || S.keyRecording === r.id">{ S.keyRecording === r.id ? $t('keys.press') : r.key }</kbd><button type="button" class="btn btn-xs btn-ghost sc-edit" v-show="!r.fixed" @click="recordKey(r.id)" :data-key-edit="r.id" :aria-label="$t('keys.change') + ': ' + r.label">{ $t('keys.change') }</button></dd></div></dl></div>
   </div>
 </dialog>
 

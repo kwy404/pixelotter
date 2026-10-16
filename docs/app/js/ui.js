@@ -558,7 +558,8 @@ export function installShell(ctx) {
     }
     ctx.toast(t('toast.copied'));
   };
-  ui.paste = async () => {
+  /** Ctrl+V places the picture at the center; Ctrl+Shift+V where it was copied from. */
+  ui.paste = async (inPlace = false) => {
     let blob = null;
     try {
       const items = await navigator.clipboard.read();
@@ -576,7 +577,7 @@ export function installShell(ctx) {
     if (!blob) return ctx.toast(t('toast.nothingToPaste'), 'warning');
     const file = new File([blob], 'pasted.png', { type: blob.type });
     if (!app.edoc) return ctx.openFiles([file]);
-    const at = ctx.clipboard?.blob === blob ? { x: ctx.clipboard.x, y: ctx.clipboard.y } : null;
+    const at = inPlace && ctx.clipboard?.blob === blob ? { x: ctx.clipboard.x, y: ctx.clipboard.y } : null;
     await ctx.placeFiles([file]);
     if (at) {
       const l = app.edoc.activeLayer;
@@ -614,13 +615,35 @@ export function installShell(ctx) {
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Escape stops a drag or a stroke that is under way
+    if (e.key === 'Escape' && app.vp.toolActive) {
+      app.vp.toolActive = false;
+      app.pointer('cancel');
+      return;
+    }
     const k = e.key.toLowerCase();
     if (k === 'x') return globals.swapColors();
     if (k === 'd') return globals.resetColors();
+    const o = app.opts(app.toolId);
+    // [ and ] change the brush size; with Shift ({ and }) the hardness
     if (k === '[' || k === ']') {
-      const o = app.opts(app.toolId);
       if (o.size) o.size = Math.max(1, Math.round(o.size * (k === '[' ? 0.85 : 1.18)));
       app.vp.needsOverlay = true;
+      return;
+    }
+    if (k === '{' || k === '}') {
+      if (typeof o.hardness === 'number') o.hardness = Math.round(Math.max(0, Math.min(1, o.hardness + (k === '{' ? -0.1 : 0.1))) * 100) / 100;
+      return;
+    }
+    // 1 to 9 set the opacity in tens, 0 sets 100%: of the brush, or else of the layer
+    if (/^[0-9]$/.test(e.key) && app.edoc) {
+      const v = e.key === '0' ? 1 : Number(e.key) / 10;
+      if (typeof o.opacity === 'number') o.opacity = v;
+      else {
+        const l = app.edoc.activeLayer;
+        if (l) app.edoc.commit(t('history.prop.opacity'), [{ t: 'set', id: l.id, props: { opacity: v } }], { merge: `opacity:${l.id}`, icon: 'layers' });
+      }
+      ctx.toast(t('toast.opacity', { n: Math.round(v * 100) }));
       return;
     }
     // Tab hides the panels only from the canvas; on a control it moves the focus as usual

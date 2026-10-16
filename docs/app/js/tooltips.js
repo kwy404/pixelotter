@@ -6,6 +6,8 @@
 //   data-cmd="file.save"    the description of the command (the row shows name and shortcut)
 //   title / aria-label      the name; data-tip adds a line, data-tip-key a shortcut
 
+import { keyLabel } from './commands.js';
+
 const HOVER_MS = 450;
 const FOCUS_MS = 150;
 const GAP = 8;
@@ -49,8 +51,10 @@ export function installTooltips(ctx) {
       return { title: el.querySelector('.menu-label')?.textContent ?? '', key: el.querySelector('.menu-key')?.textContent ?? '', text, more: '' };
     }
     const title = el.dataset.tipTitle || el.getAttribute('aria-label') || '';
-    const text = el.dataset.tip || '';
-    const key = el.dataset.tipKey || '';
+    const text = el.dataset.tip || (el.dataset.run ? has(`tip.cmd.${el.dataset.run}`) : '');
+    // a button that runs a command shows that command's shortcut
+    const runKey = el.dataset.run ? ctx.app?.commands.list.get(el.dataset.run)?.key?.split(' | ')[0] : '';
+    const key = el.dataset.tipKey || (runKey ? keyLabel(runKey) : '');
     if (!title && !text) return null;
     // a button that already reads its own name needs no tooltip
     if (!text && !key && el.textContent.trim() && el.textContent.trim().includes(title.trim())) return null;

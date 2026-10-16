@@ -104,6 +104,7 @@ export class EditorDocument extends Emitter {
     const inverse = this.apply(ops, 'local');
     this.history.push({ label, ops, inverse, merge, icon });
     this.share(ops, inverse);
+    this.emit('recorded', { label, icon, ops, inverse });
     return true;
   }
 
@@ -112,6 +113,7 @@ export class EditorDocument extends Emitter {
     if (!ops?.length) return;
     this.history.push({ label, ops, inverse, merge, icon });
     this.share(ops, inverse);
+    this.emit('recorded', { label, icon, ops, inverse });
   }
 
   share(ops, inverse) {
@@ -125,6 +127,7 @@ export class EditorDocument extends Emitter {
     if (!step) return null;
     const inv = this.apply(step.ops, 'history');
     this.share(step.ops, inv);
+    this.emit('undone', step.entry);
     return step.entry;
   }
 
@@ -133,6 +136,7 @@ export class EditorDocument extends Emitter {
     if (!step) return null;
     const inv = this.apply(step.ops, 'history');
     this.share(step.ops, inv);
+    this.emit('redone', step.entry);
     return step.entry;
   }
 

@@ -481,6 +481,44 @@ try {
     check((await a.textContent('[data-field="tool-hint"]')).length > 5, 'the status bar says what to do with the tool');
   });
 
+  await step('keyboard shortcuts', async () => {
+    await a.evaluate(() => {
+      const app = window.pixelotter.app;
+      app.run('select.none');
+      app.setTool('move');
+      window.pixelotter.ctx.ui.openPanel('layers');
+    });
+    const names = () => a.evaluate(() => window.pixelotter.app.edoc.doc.layers.map((l) => l.name));
+    const n0 = (await names()).length;
+    await a.focus('#viewport');
+    await a.keyboard.press('Control+j');
+    check((await names()).length === n0 + 1, 'Ctrl+J duplicates the layer');
+    const dup = await a.evaluate(() => window.pixelotter.app.edoc.activeLayer.name);
+    await a.keyboard.press('Delete');
+    const after = await names();
+    check(after.length === n0 && !after.includes(dup), `Delete removes the active layer (${dup})`);
+    // nothing fires while typing in a field
+    await a.click('[data-control="opacity"]');
+    await a.keyboard.press('Delete');
+    await a.keyboard.press('Control+j');
+    await a.keyboard.press('b');
+    check((await names()).length === n0 && (await a.evaluate(() => window.pixelotter.app.toolId)) === 'move', 'shortcuts do not fire inside a text field');
+    await a.focus('#viewport');
+    await a.keyboard.press('Control+z');
+    check((await names()).includes(dup), 'Ctrl+Z brings the layer back');
+    await a.keyboard.press('Control+y');
+    check(!(await names()).includes(dup), 'Ctrl+Y redoes');
+    const menuKey = await a.evaluate(async () => {
+      window.pixelotter.S.menuOpen = null;
+      document.querySelector('[data-menu="layer"]').click();
+      await new Promise((r) => setTimeout(r, 100));
+      const k = document.querySelector('.menu-pop [data-cmd="layer.duplicate"] .menu-key')?.textContent;
+      window.pixelotter.ctx.globals.closeMenus?.();
+      return k;
+    });
+    check(menuKey === 'Ctrl+J', `the menu shows the shortcut (${menuKey})`);
+  });
+
   const exportAs = async (format, cmyk = false) => {
     await a.evaluate(() => window.pixelotter.ctx.contextMenu?.close());
     await a.click('[data-action="export"]');

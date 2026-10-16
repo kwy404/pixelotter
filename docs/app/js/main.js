@@ -64,6 +64,7 @@ async function boot() {
   ]);
   const { installContext } = await import('./ui-context.js'); // preloaded with the rest
   const { installTooltips } = await import('./tooltips.js');
+  const { installActivity } = await import('./activity.js');
   step('Setting up the workspace', 0.45);
   document.getElementById('dialogs').innerHTML = DIALOGS_HTML;
 
@@ -86,7 +87,7 @@ async function boot() {
     { id: 'a', tabs: ['color', 'swatches'], active: 'color', open: true, collapsed: false },
     { id: 'b', tabs: ['properties', 'adjustments', 'info'], active: 'properties', open: true, collapsed: false },
     { id: 'c', tabs: ['layers', 'channels', 'paths'], active: 'layers', open: true, collapsed: false, grow: true },
-    { id: 'd', tabs: ['history', 'actions'], active: 'history', open: true, collapsed: false },
+    { id: 'd', tabs: ['history', 'activity', 'actions'], active: 'history', open: true, collapsed: false },
     { id: 'e', tabs: ['live'], active: 'live', open: false, collapsed: false },
   ];
   const lang = saved.lang || (navigator.language?.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en');
@@ -229,6 +230,7 @@ async function boot() {
   installExtra(ctx);
   installContext(ctx);
   installTooltips(ctx);
+  installActivity(ctx);
   S.adjustmentList = ['brightness-contrast', 'levels', 'curves', 'exposure', 'vibrance', 'hue-saturation', 'color-balance', 'black-white', 'photo-filter', 'channel-mixer', 'invert', 'posterize', 'threshold', 'gradient-map', 'selective-color', 'look', 'tone'];
 
   // keep the parts of the UI that depend on the active layer up to date

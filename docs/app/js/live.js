@@ -478,7 +478,19 @@ export class Live extends Emitter {
     this.call.dropPeer(id);
   }
 
+  /** My step for the Activity panel of everyone in the room. */
+  shareActivity(e) {
+    if (!this.session || (this.mode !== 'host' && this.mode !== 'guest')) return;
+    const msg = { t: 'activity', from: this.myId, e: { k: e.k, label: e.label, layer: e.layer, lname: e.lname, txt: e.txt, at: e.at } };
+    for (const port of this.ports.values()) if (this.mode === 'host' || port === this.ports.get('host')) port.send(msg);
+  }
+
   hostReceive(from, msg) {
+    if (msg.t === 'activity') {
+      this.app.activityRemote?.(this.edoc, from, msg.e);
+      for (const [id, p] of this.ports) if (id !== from) p.send({ ...msg, from });
+      return;
+    }
     if (msg.t === 'chat' || msg.t === 'react') {
       this.chatReceive({ ...msg, from });
       for (const [id, p] of this.ports) if (id !== from) p.send({ ...msg, from });
@@ -581,6 +593,7 @@ export class Live extends Emitter {
   }
 
   guestReceive(msg) {
+    if (msg.t === 'activity') return this.app.activityRemote?.(this.edoc, msg.from, msg.e);
     if (msg.t === 'chat' || msg.t === 'react') return this.chatReceive(msg);
     if (msg.t === 'chat-history') {
       for (const m of msg.messages ?? []) this.chatReceive(m);

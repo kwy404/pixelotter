@@ -3,7 +3,7 @@
 // The precache block below is rewritten by scripts/build-app.mjs.
 
 // precache:start
-const CACHE_VERSION = '9cde41dbaae1';
+const CACHE_VERSION = '40cbe1a8ca54';
 const PRECACHE = [
   './',
   'app.css',
@@ -16,6 +16,7 @@ const PRECACHE = [
   'icons/maskable-512.png',
   'icons/maskable.svg',
   'index.html',
+  'js/activity.js',
   'js/app.js',
   'js/commands.js',
   'js/context-menu.js',

@@ -204,7 +204,7 @@ export class App {
   syncHistory() {
     const h = this.edoc?.history;
     if (!h) return;
-    this.S.history = [{ i: 0, label: this.t('history.open'), icon: 'file' }, ...h.entries.map((e, i) => ({ i: i + 1, label: e.label, icon: e.icon ?? 'history' }))];
+    this.S.history = [{ i: 0, label: this.t('history.open'), icon: 'file' }, ...h.entries.map((e, i) => ({ i: i + 1, label: e.label, icon: e.icon ?? 'history', author: e.author?.color ?? '', by: e.author?.name ?? '' }))];
     this.S.historyIndex = h.index;
     this.S.canUndo = h.canUndo;
     this.S.canRedo = h.canRedo;

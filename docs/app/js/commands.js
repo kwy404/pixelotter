@@ -16,7 +16,24 @@ const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
 export const MOD = isMac ? 'Cmd' : 'Ctrl';
 
 /** Readable shortcut text for menus: "Ctrl+Shift+S" style, with the platform modifier. */
-export const keyLabel = (k) => (k ? k.replace('Mod', MOD).replace('Alt', isMac ? 'Option' : 'Alt') : '');
+/** A keyboard event as a combo such as 'Mod+Shift+Z' (Mod is Ctrl, or Cmd on a Mac). */
+export function comboOf(e) {
+  const parts = [];
+  if (e.ctrlKey || e.metaKey) parts.push('Mod');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  let k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  if (e.code?.startsWith('Digit')) k = e.code.slice(5);
+  if (k === '+' || k === '=') k = '=';
+  if (k === '_') k = '-';
+  if (k === '{') k = '[';
+  if (k === '}') k = ']';
+  if (k === '"') k = "'";
+  if (k === ':') k = ';';
+  return [...parts, k].join('+');
+}
+
+export const keyLabel = (k) => (k ? k.replace('Mod', MOD).replace('Alt', isMac ? 'Option' : 'Alt').replace(/\+=$/, '++') : '');
 
 export class Commands {
   constructor(app, ui) {
@@ -30,6 +47,19 @@ export class Commands {
 
   add(id, run, { key = null, enabled = null, label = null } = {}) {
     this.list.set(id, { id, run, key, enabled, label });
+  }
+
+  /** Your own keys (from Settings), over the defaults: { command id: 'Mod+Shift+K' or '' }. */
+  applyKeys(custom = {}) {
+    this.defaults ??= new Map([...this.list.values()].map((c) => [c.id, c.key]));
+    for (const [id, key] of this.defaults) this.list.get(id).key = key;
+    for (const [id, key] of Object.entries(custom)) {
+      const c = this.list.get(id);
+      if (!c || typeof key !== 'string') continue;
+      // a key moves: no other command keeps it
+      if (key) for (const o of this.list.values()) if (o.id !== id && o.key) o.key = o.key.split(' | ').filter((k) => k !== key).join(' | ') || null;
+      c.key = key || null;
+    }
   }
 
   can(id) {
@@ -59,19 +89,7 @@ export class Commands {
 
   /** Finds the command for a keyboard event. */
   match(e) {
-    const parts = [];
-    if (e.ctrlKey || e.metaKey) parts.push('Mod');
-    if (e.altKey) parts.push('Alt');
-    if (e.shiftKey) parts.push('Shift');
-    let k = e.key.length === 1 ? e.key.toUpperCase() : e.key;
-    if (e.code?.startsWith('Digit')) k = e.code.slice(5);
-    if (k === '+' || k === '=') k = '=';
-    if (k === '_') k = '-';
-    if (k === '{') k = '[';
-    if (k === '}') k = ']';
-    if (k === '"') k = "'";
-    if (k === ':') k = ';';
-    const combo = [...parts, k].join('+');
+    const combo = comboOf(e);
     // several commands may share a key (Duplicate and Layer via Copy): the first enabled one wins
     let first = null;
     for (const c of this.list.values()) {
@@ -177,7 +195,7 @@ function define(C) {
   }, { key: 'Mod+Alt+W', enabled: hasDoc });
   add('file.save', (app) => ui.save(app.edoc), { key: 'Mod+S', enabled: hasDoc });
   add('file.saveAs', (app) => ui.save(app.edoc, true), { key: 'Mod+Shift+S', enabled: hasDoc });
-  add('file.export', () => ui.exportDialog(), { key: 'Mod+Alt+Shift+W | Mod+Shift+E', enabled: hasDoc });
+  add('file.export', () => ui.exportDialog(), { key: 'Mod+Alt+Shift+W', enabled: hasDoc });
   add('file.quickExport', () => ui.quickExport(), { key: "Mod+Shift+'", enabled: hasDoc });
   add('file.revert', (app) => ui.revert(app.edoc), { key: 'F12', enabled: (app) => hasDoc(app) && !!app.edoc.file?.saved });
   add('file.send', () => ui.sendDialog(), { enabled: hasDoc });
@@ -187,14 +205,15 @@ function define(C) {
 
   // ---------- Edit ----------
   add('edit.undo', (app) => app.edoc.undo(), { key: 'Mod+Z', enabled: (app) => app.edoc?.history.canUndo });
-  add('edit.redo', (app) => app.edoc.redo(), { key: 'Mod+Shift+Z', enabled: (app) => app.edoc?.history.canRedo });
+  add('edit.redo', (app) => app.edoc.redo(), { key: 'Mod+Shift+Z | Mod+Y', enabled: (app) => app.edoc?.history.canRedo });
   add('edit.cut', async () => {
     await C.run('edit.copy');
     await C.run('edit.clear');
   }, { key: 'Mod+X', enabled: (app) => hasSel(app) && isRaster(app) });
   add('edit.copy', () => ui.copy(false), { key: 'Mod+C', enabled: hasLayer });
   add('edit.copyMerged', () => ui.copy(true), { key: 'Mod+Shift+C', enabled: hasDoc });
-  add('edit.paste', () => ui.paste(), { key: 'Mod+V' });
+  add('edit.paste', () => ui.paste(false), { key: 'Mod+V' });
+  add('edit.pasteInPlace', () => ui.paste(true), { key: 'Mod+Shift+V' });
   add('edit.clear', (app) => {
     const l = active(app);
     const sel = selectionCanvasLayerPixels(app, l);
@@ -320,8 +339,17 @@ function define(C) {
     const l = active(app);
     const ids = subtree(doc(app), l.id).reverse();
     app.edoc.commit(app.t('history.deleteLayer'), ids.map((id) => ({ t: 'remove', id })), { icon: 'trash' });
-  }, { enabled: (app) => hasLayer(app) && editable(app) });
-  add('layer.rename', () => ui.renameLayer(), { enabled: hasLayer });
+  }, { key: 'Delete | Backspace', enabled: (app) => hasLayer(app) && editable(app) && !(hasSel(app) && isRaster(app)) });
+  add('layer.rename', () => ui.renameLayer(), { key: 'F2', enabled: hasLayer });
+  // Alt+[ and Alt+]: the layer below or above in the panel
+  const step = (app, dir) => {
+    const list = doc(app).layers;
+    const i = list.findIndex((l) => l.id === app.edoc.active);
+    const next = list[Math.max(0, Math.min(list.length - 1, (i < 0 ? list.length : i) + dir))];
+    if (next) app.selectLayer(next.id);
+  };
+  add('layer.selectBelow', (app) => step(app, -1), { key: 'Alt+[', enabled: hasLayer });
+  add('layer.selectAbove', (app) => step(app, 1), { key: 'Alt+]', enabled: hasLayer });
   add('layer.rasterize', (app) => {
     const l = active(app);
     const d = doc(app);
@@ -485,7 +513,7 @@ function define(C) {
     app.S.view.proof = !app.S.view.proof;
     app.renderer.forceProof = app.S.view.proof;
     app.vp.invalidate();
-  }, { key: 'Mod+Y', enabled: hasDoc });
+  }, { key: 'Mod+Alt+Y', enabled: hasDoc });
   add('view.gamut', (app) => {
     app.S.view.gamut = !app.S.view.gamut;
     app.vp.gamut = app.S.view.gamut;
@@ -594,7 +622,7 @@ function mergeAll(app, visibleOnly) {
  */
 export const MENUS = [
   ['menu.file', ['file.new', 'file.open', ['menu.file.recent', 'recent'], 'file.place', '-', 'file.close', 'file.closeAll', 'file.save', 'file.saveAs', 'file.revert', '-', 'file.export', 'file.quickExport', 'file.sticker', '-', 'file.send', 'file.share', 'file.join']],
-  ['menu.edit', ['edit.undo', 'edit.redo', ['menu.edit.history', 'history'], '-', 'edit.cut', 'edit.copy', 'edit.copyMerged', 'edit.paste', 'edit.clear', '-', 'edit.fill', 'edit.stroke', 'edit.contentAware', '-', 'edit.freeTransform', ['menu.edit.transform', ['edit.rotate90', 'edit.rotate-90', 'edit.rotate180', 'edit.flipH', 'edit.flipV']], '-', 'edit.definePattern', '-', 'edit.shortcuts', 'edit.settings']],
+  ['menu.edit', ['edit.undo', 'edit.redo', ['menu.edit.history', 'history'], '-', 'edit.cut', 'edit.copy', 'edit.copyMerged', 'edit.paste', 'edit.pasteInPlace', 'edit.clear', '-', 'edit.fill', 'edit.stroke', 'edit.contentAware', '-', 'edit.freeTransform', ['menu.edit.transform', ['edit.rotate90', 'edit.rotate-90', 'edit.rotate180', 'edit.flipH', 'edit.flipV']], '-', 'edit.definePattern', '-', 'edit.shortcuts', 'edit.settings']],
   ['menu.image', [['menu.image.mode', ['image.mode.rgb', 'image.mode.gray', 'image.mode.cmyk']], '-', ['menu.image.adjustments', ADJUSTMENT_IDS.map((id) => `adjust.${id}`)], 'image.autoTone', '-', 'image.imageSize', 'image.canvasSize', ['menu.image.rotate', ['image.rotateCW', 'image.rotateCCW', 'image.rotate180', 'image.flipH', 'image.flipV']], 'image.cropToSelection', 'image.trim', '-', 'image.duplicate']],
   ['menu.layer', ['layer.new', 'layer.newGroup', 'layer.ungroup', 'layer.duplicate', 'layer.viaCopy', 'layer.viaCut', 'layer.delete', 'layer.rename', '-', ['menu.layer.adjustment', ADJUSTMENT_IDS.map((id) => `layer.newAdjustment:${id}`)], ['menu.layer.fill', ['layer.newFill:solid', 'layer.newFill:gradient', 'layer.newFill:pattern']], 'layer.style', '-', ['menu.layer.mask', ['layer.addMask:auto', 'layer.addMask:hide', 'layer.editMask', 'layer.toggleMask', 'layer.invertMask', 'layer.applyMask', 'layer.deleteMask']], 'layer.clip', '-', ['menu.layer.arrange', ['layer.front', 'layer.forward', 'layer.backward', 'layer.back']], 'layer.rasterize', 'layer.mergeDown', 'layer.mergeVisible', 'layer.flatten', '-', 'layer.removeBackground', 'layer.hide', 'layer.lock']],
   ['menu.select', ['select.all', 'select.none', 'select.reselect', 'select.inverse', '-', 'select.subject', 'select.colorRange', 'select.refine', '-', ['menu.select.modify', ['select.feather', 'select.expand', 'select.contract']], '-', 'select.fromLayer', 'select.fromPath', 'select.toMask']],

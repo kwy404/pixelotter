@@ -19,6 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/voodoojs@1.0.0/dist/voodoo.full.min.js" id="voodoo-js" data-manual async></script>
 <script type="module" src="js/main.js"></script>
 <!-- modulepreload:start -->
+<link rel="modulepreload" href="js/activity.js">
 <link rel="modulepreload" href="js/app.js">
 <link rel="modulepreload" href="js/commands.js">
 <link rel="modulepreload" href="js/context-menu.js">
@@ -132,8 +133,8 @@
       <div class="peers" v-show="S.live.mode === 'host' || S.live.mode === 'guest'">
         <span class="peer-dot" v-for="p in S.live.peers" :key="p.id" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }" :title="p.name">{ p.name.slice(0, 1).toUpperCase() }</span>
       </div>
-      <button type="button" class="btn btn-sm btn-ghost" @click="run('file.share')" :disabled="!S.doc.name" data-action="share" :title="$t('cmd.file.share')" :data-tip="$t('tip.share')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg><span class="hide-sm">{ S.live.mode === 'off' ? $t('live.share') : $t('live.session') }</span></button>
-      <button type="button" class="btn btn-sm btn-primary" @click="run('file.export')" :disabled="!S.doc.name" data-action="export" :title="$t('export.button')" :data-tip="$t('tip.export')" data-tip-key="Ctrl+Shift+E"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-export"/></svg><span class="hide-sm">{ $t('export.button') }</span></button>
+      <button type="button" class="btn btn-sm btn-ghost" @click="run('file.share')" :disabled="!S.doc.name" data-action="share" :title="$t('cmd.file.share')" :data-tip="$t('tip.share')" data-run="file.share"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg><span class="hide-sm">{ S.live.mode === 'off' ? $t('live.share') : $t('live.session') }</span></button>
+      <button type="button" class="btn btn-sm btn-primary" @click="run('file.export')" :disabled="!S.doc.name" data-action="export" :title="$t('export.button')" :data-tip="$t('tip.export')" data-run="file.export"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-export"/></svg><span class="hide-sm">{ $t('export.button') }</span></button>
       <button type="button" class="icon-btn theme-btn" v-theme-toggle.cycle :aria-label="$t('theme.switch')" :title="$t('theme.switch')" :data-tip="$t('tip.theme')"><svg class="ic ti-system" aria-hidden="true"><use href="icons.svg#i-aperture"/></svg><svg class="ic ti-light" aria-hidden="true"><use href="icons.svg#i-sparkle"/></svg><svg class="ic ti-dark" aria-hidden="true"><use href="icons.svg#i-proof"/></svg></button>
     </div>
     <!-- open menu -->
@@ -176,8 +177,8 @@
       <label class="opt" v-show="S.tool === 'wand' || S.tool === 'quick-select'"><span>{ $t('opt.tolerance') }</span><input class="num" type="number" min="0" max="255" v-model.number="S.options[S.tool].tolerance"></label>
       <label class="opt" v-show="S.tool === 'wand'"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.wand.contiguous"><span>{ $t('opt.contiguous') }</span></label>
       <label class="opt" v-show="S.tool === 'wand'"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.wand.sampleAll"><span>{ $t('opt.sampleAll') }</span></label>
-      <button type="button" class="btn btn-xs btn-soft" @click="run('select.subject')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-subject"/></svg>{ $t('menu.select.subject') }</button>
-      <button type="button" class="btn btn-xs btn-ghost" @click="run('select.refine')" :disabled="!S.selection.active">{ $t('cmd.select.refine') }</button>
+      <button type="button" class="btn btn-xs btn-soft" @click="run('select.subject')" data-run="select.subject"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-subject"/></svg>{ $t('menu.select.subject') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="run('select.refine')" :disabled="!S.selection.active" data-run="select.refine">{ $t('cmd.select.refine') }</button>
     </div>
     <div class="opt-group" v-show="S.tool === 'move'">
       <label class="opt"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.move.autoSelect"><span>{ $t('opt.autoSelect') }</span></label>
@@ -225,14 +226,14 @@
     </div>
     <div class="opt-group" v-show="S.tool === 'pen'">
       <span class="opt-hint">{ $t('opt.penHint') }</span>
-      <button type="button" class="btn btn-xs btn-soft" @click="run('select.fromPath')">{ $t('cmd.select.fromPath') }</button>
+      <button type="button" class="btn btn-xs btn-soft" @click="run('select.fromPath')" data-run="select.fromPath">{ $t('cmd.select.fromPath') }</button>
       <button type="button" class="btn btn-xs btn-ghost" @click="pathAction('fill')">{ $t('path.fill') }</button>
       <button type="button" class="btn btn-xs btn-ghost" @click="pathAction('stroke')">{ $t('path.stroke') }</button>
     </div>
     <div class="opt-group" v-show="S.tool === 'patch' || S.tool === 'spot-heal'"><span class="opt-hint">{ $t('opt.hint.' + S.tool) }</span></div>
     <div class="opt-group" v-show="S.tool === 'hand' || S.tool === 'zoom'">
-      <button type="button" class="btn btn-xs btn-ghost" @click="run('view.fit')">{ $t('cmd.view.fit') }</button>
-      <button type="button" class="btn btn-xs btn-ghost" @click="run('view.actual')">100%</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="run('view.fit')" data-run="view.fit">{ $t('cmd.view.fit') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="run('view.actual')" data-run="view.actual">100%</button>
     </div>
     <span class="opt-spacer"></span>
     <span class="opt-desc" data-field="tool-desc">{ $t('tip.tool.' + S.tool) }</span>
@@ -277,7 +278,7 @@
         </div>
         <div v-show="S.quickTab === 'cutout'">
           <p class="quick-note">{ $t('cutout.intro') }</p>
-          <button type="button" class="btn btn-block btn-primary big" @click="run('layer.removeBackground')" :disabled="!S.active || S.active.type !== 'raster'" data-action="remove-bg"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-cutout"/></svg>{ $t('cmd.layer.removeBackground') }</button>
+          <button type="button" class="btn btn-block btn-primary big" @click="run('layer.removeBackground')" :disabled="!S.active || S.active.type !== 'raster'" data-action="remove-bg" data-run="layer.removeBackground"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-cutout"/></svg>{ $t('cmd.layer.removeBackground') }</button>
           <div class="model-state" v-show="S.model.state === 'loading'"><progress class="progress progress-sm" :value="Math.round(S.model.progress * 100)" max="100"></progress><span>{ $t('model.loading', { mb: S.model.mb }) }</span></div>
           <p class="quick-error" v-show="S.model.state === 'error'" role="alert">{ S.model.error }</p>
           <div class="refine" v-show="S.active && S.active.mask">
@@ -285,13 +286,13 @@
             <div class="segmented segmented-sm segmented-block" role="radiogroup"><label class="segmented-item"><input type="radio" name="refine" :checked="S.refine === 'keep'" @change="refineBrush('keep')">{ $t('cutout.keep') }</label><label class="segmented-item"><input type="radio" name="refine" :checked="S.refine === 'erase'" @change="refineBrush('erase')">{ $t('cutout.erase') }</label></div>
             <label class="slider"><span>{ $t('cutout.brush') }<b>{ S.options.brush.size }px</b></span><input type="range" class="range range-sm" min="4" max="300" v-model.number="S.options.brush.size"></label>
             <label class="slider"><span>{ $t('cutout.feather') }<b>{ S.active && S.active.mask ? S.active.mask.feather : 0 }px</b></span><input type="range" class="range range-sm" min="0" max="60" :value="S.active && S.active.mask ? S.active.mask.feather : 0" @input="setFeather($event.target.value)" data-action="feather"></label>
-            <button type="button" class="btn btn-sm btn-ghost" @click="run('layer.toggleMask')">{ $t('cutout.toggle') }</button>
+            <button type="button" class="btn btn-sm btn-ghost" @click="run('layer.toggleMask')" data-run="layer.toggleMask">{ $t('cutout.toggle') }</button>
           </div>
           <p class="quick-small">{ $t('cutout.model', { name: S.modelName, license: S.modelLicense }) }</p>
         </div>
         <div v-show="S.quickTab === 'sticker'">
           <p class="quick-note">{ $t('sticker.intro') }</p>
-          <button type="button" class="btn btn-block btn-primary big" @click="run('file.sticker')" data-action="sticker"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-sticker"/></svg>{ $t('sticker.open') }</button>
+          <button type="button" class="btn btn-block btn-primary big" @click="run('file.sticker')" data-action="sticker" data-run="file.sticker"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-sticker"/></svg>{ $t('sticker.open') }</button>
         </div>
         <div v-show="S.quickTab === 'text'">
           <div class="presets">
@@ -314,7 +315,7 @@
           <button type="button" class="doc-tab-name" @click="activateTab(tb.uid)"><svg class="ic" v-show="tb.shared" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg>{ tb.name }<span class="dirty" v-show="tb.dirty" :title="$t('tabs.unsaved')"></span></button>
           <button type="button" class="doc-tab-close" @click="closeTab(tb.uid)" :aria-label="$t('tabs.close')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button>
         </div>
-        <button type="button" class="doc-tab-new" @click="run('file.new')" :aria-label="$t('cmd.file.new')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
+        <button type="button" class="doc-tab-new" @click="run('file.new')" :aria-label="$t('cmd.file.new')" data-run="file.new"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
       </div>
       <div id="viewport" tabindex="0" :aria-label="$t('ctx.canvas')" class="viewport" v-show="S.screen === 'editor'" :class="{ 'no-rulers': !S.view.rulers || S.workspace === 'quick' }">
         <canvas class="vp-corner" aria-hidden="true"></canvas>
@@ -327,7 +328,7 @@
         </div>
       </div>
       <footer class="status" v-show="S.screen === 'editor'">
-        <span class="st zoom"><button type="button" class="st-btn" @click="run('view.zoomOut')" :aria-label="$t('cmd.view.zoomOut')">-</button><b>{ S.doc.zoom }%</b><button type="button" class="st-btn" @click="run('view.zoomIn')" :aria-label="$t('cmd.view.zoomIn')">+</button></span>
+        <span class="st zoom"><button type="button" class="st-btn" @click="run('view.zoomOut')" :aria-label="$t('cmd.view.zoomOut')" data-run="view.zoomOut">-</button><b>{ S.doc.zoom }%</b><button type="button" class="st-btn" @click="run('view.zoomIn')" :aria-label="$t('cmd.view.zoomIn')" data-run="view.zoomIn">+</button></span>
         <span class="st">{ S.doc.width } x { S.doc.height } px</span>
         <span class="st">{ $t('mode.' + S.doc.mode) }</span>
         <span class="st hide-sm" v-show="S.status.x !== null">X { S.status.x } Y { S.status.y }</span>
@@ -351,10 +352,10 @@
             </div>
           </div>
           <div class="home-actions">
-            <button type="button" class="home-card primary" @click="run('file.new')" data-action="new"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-file-new"/></svg><b>{ $t('home.new') }</b><small>{ $t('home.newHint') }</small></button>
-            <button type="button" class="home-card" @click="run('file.open')" data-action="open"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-open"/></svg><b>{ $t('home.open') }</b><small>{ $t('home.openHint') }</small></button>
+            <button type="button" class="home-card primary" @click="run('file.new')" data-action="new" data-run="file.new"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-file-new"/></svg><b>{ $t('home.new') }</b><small>{ $t('home.newHint') }</small></button>
+            <button type="button" class="home-card" @click="run('file.open')" data-action="open" data-run="file.open"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-open"/></svg><b>{ $t('home.open') }</b><small>{ $t('home.openHint') }</small></button>
             <button type="button" class="home-card" @click="openSample('otter-desk')" data-action="sample"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-image"/></svg><b>{ $t('home.sample') }</b><small>{ $t('home.sampleHint') }</small></button>
-            <button type="button" class="home-card" @click="run('file.join')" data-action="join"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-words"/></svg><b>{ $t('home.join') }</b><small>{ $t('home.joinHint') }</small></button>
+            <button type="button" class="home-card" @click="run('file.join')" data-action="join" data-run="file.join"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-words"/></svg><b>{ $t('home.join') }</b><small>{ $t('home.joinHint') }</small></button>
           </div>
           <p class="home-drop"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-download"/></svg>{ $t('home.drop') }</p>
           <h2 class="home-h">{ $t('home.templates') }</h2>
@@ -456,7 +457,7 @@
                 <label class="slider" v-for="k in ['exposure','contrast','saturation','warmth','shadows','highlights']" :key="k"><span>{ $t('adjust.' + k) }<b>{ S.active.adjust[k] }</b></span><input type="range" class="range range-xs" min="-100" max="100" .value="S.active.adjust[k]" @input="quickAdjust(k, $event.target.value)"></label>
                 <label class="slider" v-show="S.active.mask"><span>{ $t('cutout.feather') }<b>{ S.active.mask ? S.active.mask.feather : 0 }</b></span><input type="range" class="range range-xs" min="0" max="100" .value="S.active.mask ? S.active.mask.feather : 0" @input="setFeather($event.target.value)"></label>
               </div>
-              <button type="button" class="btn btn-xs btn-ghost" @click="run('layer.style')" v-show="!['group','adjust'].includes(S.active.type)"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg>{ $t('cmd.layer.style') }</button>
+              <button type="button" class="btn btn-xs btn-ghost" @click="run('layer.style')" v-show="!['group','adjust'].includes(S.active.type)" data-run="layer.style"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg>{ $t('cmd.layer.style') }</button>
             </div>
           </div>
 
@@ -491,14 +492,14 @@
                 <button type="button" class="lock" @click.stop="toggleLock(l.id)" :aria-label="l.locked ? $t('layers.unlock') : $t('layers.lock')" :data-tip="$t('tip.layer.lock')"><svg class="ic" aria-hidden="true"><use :href="l.locked ? 'icons.svg#i-lock' : 'icons.svg#i-unlock'"/></svg></button>
               </li>
             </ul>
-            <div class="panel-empty" v-show="!S.layers.length"><p>{ $t('layers.empty') } { $t('layers.emptyHint') }</p><button type="button" class="btn btn-xs btn-soft" @click="run('layer.new')" data-action="empty-new-layer">{ $t('layers.create') }</button></div>
+            <div class="panel-empty" v-show="!S.layers.length"><p>{ $t('layers.empty') } { $t('layers.emptyHint') }</p><button type="button" class="btn btn-xs btn-soft" @click="run('layer.new')" data-action="empty-new-layer" data-run="layer.new">{ $t('layers.create') }</button></div>
             <footer class="layer-foot">
-              <button type="button" class="icon-btn sm" @click="run('layer.style')" :title="$t('cmd.layer.style')" :aria-label="$t('cmd.layer.style')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg></button>
-              <button type="button" class="icon-btn sm" @click="run('layer.addMask', 'auto')" :title="$t('cmd.layer.addMask')" :aria-label="$t('cmd.layer.addMask')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-mask"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.style')" :title="$t('cmd.layer.style')" :aria-label="$t('cmd.layer.style')" data-run="layer.style"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.addMask', 'auto')" :title="$t('cmd.layer.addMask')" :aria-label="$t('cmd.layer.addMask')" data-run="layer.addMask"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-mask"/></svg></button>
               <button type="button" class="icon-btn sm" @click="togglePanelTab('adjustments')" :title="$t('panel.adjustments')" :aria-label="$t('panel.adjustments')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-adjust-layer"/></svg></button>
-              <button type="button" class="icon-btn sm" @click="run('layer.newGroup')" :title="$t('cmd.layer.newGroup')" :aria-label="$t('cmd.layer.newGroup')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-folder"/></svg></button>
-              <button type="button" class="icon-btn sm" @click="run('layer.new')" :title="$t('cmd.layer.new')" :aria-label="$t('cmd.layer.new')" data-action="new-layer"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
-              <button type="button" class="icon-btn sm" @click="run('layer.delete')" :title="$t('cmd.layer.delete')" :aria-label="$t('cmd.layer.delete')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-trash"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.newGroup')" :title="$t('cmd.layer.newGroup')" :aria-label="$t('cmd.layer.newGroup')" data-run="layer.newGroup"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-folder"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.new')" :title="$t('cmd.layer.new')" :aria-label="$t('cmd.layer.new')" data-action="new-layer" data-run="layer.new"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.delete')" :title="$t('cmd.layer.delete')" :aria-label="$t('cmd.layer.delete')" data-run="layer.delete"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-trash"/></svg></button>
             </footer>
           </div>
 
@@ -518,15 +519,25 @@
           <div v-if="g.active === 'paths'" class="p-paths">
             <ul class="list-plain"><li v-for="p in S.doc.paths" :key="p.id" :class="{ active: p.active }"><button type="button" @click="selectPath(p.id)"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-pen"/></svg>{ p.name }<small>{ p.points } { $t('paths.points') }</small></button></li></ul>
             <p class="panel-empty" v-show="!S.doc.paths || !S.doc.paths.length">{ $t('paths.empty') }</p>
-            <footer class="layer-foot"><button type="button" class="btn btn-xs btn-ghost" @click="run('select.fromPath')">{ $t('cmd.select.fromPath') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('fill')">{ $t('path.fill') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('stroke')">{ $t('path.stroke') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('delete')">{ $t('path.delete') }</button></footer>
+            <footer class="layer-foot"><button type="button" class="btn btn-xs btn-ghost" @click="run('select.fromPath')" data-run="select.fromPath">{ $t('cmd.select.fromPath') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('fill')">{ $t('path.fill') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('stroke')">{ $t('path.stroke') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('delete')">{ $t('path.delete') }</button></footer>
           </div>
 
           <!-- History -->
+          <div v-if="g.active === 'activity'" class="p-activity">
+            <div class="activity-bar">
+              <select class="select select-xs" .value="S.activityFilter" @change="activityFilterBy($event.target.value)" :aria-label="$t('activity.filterBy')" data-field="activity-filter"><option value="">{ $t('activity.everyone') }</option><option v-for="p in S.activityPeople" :key="p.id" :value="p.id" :selected="S.activityFilter === p.id">{ p.name }</option></select>
+              <button type="button" class="btn btn-xs btn-ghost" @click="activityExport()" :disabled="!S.activity.length" data-action="activity-export" :data-tip="$t('activity.exportHint')">{ $t('activity.export') }</button>
+            </div>
+            <ol class="activity-list" :aria-label="$t('panel.activity')">
+              <li v-for="a in S.activity" :key="a.id"><button type="button" @click="activityPick(a)" :data-activity="a.id" :data-by="a.by"><span class="peer-mini" :style="{ background: a.color }" aria-hidden="true">{ a.initial }</span><span class="activity-text">{ a.text }</span><time>{ a.time }</time></button></li>
+            </ol>
+            <p class="panel-empty" v-show="!S.activity.length">{ $t('activity.empty') }</p>
+          </div>
           <div v-if="g.active === 'history'" class="p-history">
             <ol class="history-list" :aria-label="$t('panel.history')">
-              <li v-for="h in S.history" :key="h.i" :class="{ current: h.i === S.historyIndex, future: h.i > S.historyIndex }"><button type="button" @click="goHistory(h.i)" :data-history="h.i"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + h.icon"/></svg>{ h.label }</button></li>
+              <li v-for="h in S.history" :key="h.i" :class="{ current: h.i === S.historyIndex, future: h.i > S.historyIndex }"><button type="button" @click="goHistory(h.i)" :data-history="h.i"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + h.icon"/></svg>{ h.label }<span class="hist-author" v-show="h.author" :style="{ background: h.author }" :title="h.by"></span></button></li>
             </ol>
-            <footer class="layer-foot"><button type="button" class="icon-btn sm" @click="run('edit.undo')" :disabled="!S.canUndo" :aria-label="$t('cmd.edit.undo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-undo"/></svg></button><button type="button" class="icon-btn sm" @click="run('edit.redo')" :disabled="!S.canRedo" :aria-label="$t('cmd.edit.redo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-redo"/></svg></button></footer>
+            <footer class="layer-foot"><button type="button" class="icon-btn sm" @click="run('edit.undo')" :disabled="!S.canUndo" :aria-label="$t('cmd.edit.undo')" data-run="edit.undo"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-undo"/></svg></button><button type="button" class="icon-btn sm" @click="run('edit.redo')" :disabled="!S.canRedo" :aria-label="$t('cmd.edit.redo')" data-run="edit.redo"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-redo"/></svg></button></footer>
           </div>
 
           <!-- Actions -->
@@ -542,8 +553,8 @@
           <div v-if="g.active === 'live'" class="p-live">
             <div v-show="S.live.mode === 'off'" class="live-off">
               <p>{ $t('live.intro') }</p>
-              <button type="button" class="btn btn-sm btn-primary" @click="run('file.share')">{ $t('live.share') }</button>
-              <button type="button" class="btn btn-sm btn-ghost" @click="run('file.join')">{ $t('home.join') }</button>
+              <button type="button" class="btn btn-sm btn-primary" @click="run('file.share')" data-run="file.share">{ $t('live.share') }</button>
+              <button type="button" class="btn btn-sm btn-ghost" @click="run('file.join')" data-run="file.join">{ $t('home.join') }</button>
             </div>
             <div v-show="S.live.mode === 'host' || S.live.mode === 'guest'">
               <div class="tabs tabs-xs tabs-boxed live-tabs" role="tablist">
@@ -617,8 +628,8 @@
 
   <!-- Mobile bottom bar -->
   <nav class="bottombar" v-show="S.screen === 'editor'" :aria-label="$t('tools.label')">
-    <button type="button" @click="run('edit.undo')" :disabled="!S.canUndo" :aria-label="$t('cmd.edit.undo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-undo"/></svg></button>
-    <button type="button" @click="run('edit.redo')" :disabled="!S.canRedo" :aria-label="$t('cmd.edit.redo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-redo"/></svg></button>
+    <button type="button" @click="run('edit.undo')" :disabled="!S.canUndo" :aria-label="$t('cmd.edit.undo')" data-run="edit.undo"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-undo"/></svg></button>
+    <button type="button" @click="run('edit.redo')" :disabled="!S.canRedo" :aria-label="$t('cmd.edit.redo')" data-run="edit.redo"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-redo"/></svg></button>
     <button type="button" v-for="tid in ['move','brush','eraser','text','crop']" :key="tid" :class="{ active: S.tool === tid }" @click="setTool(tid)" :aria-label="$t('tool.' + tid)"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(tid)"/></svg></button>
     <button type="button" @click="openSheet('layers')" :aria-label="$t('panel.layers')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-layers"/></svg></button>
   </nav>

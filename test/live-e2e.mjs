@@ -116,6 +116,14 @@ try {
     check(true, 'a layer added by a guest appears for the host');
     await c.waitForFunction(() => window.pixelotter.app.edoc.doc.layers.length === 2, null, { timeout: 30000 });
     check(true, 'and for the other guests');
+    // the Activity panel tells who did it, on every screen
+    await a.evaluate(() => window.pixelotter.ctx.ui.openPanel('activity'));
+    const said = await a.waitForFunction(() => window.pixelotter.S.activity.find((x) => x.text.startsWith('Bia added the layer'))?.text, null, { timeout: 15000 }).then((h) => h.jsonValue(), () => '');
+    check(!!said, `the host's activity log names the guest (${said})`);
+    const own = await b.evaluate(() => window.pixelotter.app.edoc.activity?.some((x) => x.k === 'add'));
+    check(own, 'and the guest logs her own step as hers');
+    await c.waitForFunction(() => window.pixelotter.app.edoc.activity?.some((x) => x.name === 'Bia' && x.k === 'add'), null, { timeout: 15000 });
+    check(true, 'the other guests get the same entry');
     await a.evaluate(() => {
       const app = window.pixelotter.app;
       const l = app.edoc.doc.layers[0];

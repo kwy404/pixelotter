@@ -11,6 +11,8 @@ All notable changes to pixelotter are documented here. The format follows [Keep 
 - Tooltips with a name, a line on what it does, a tip and the shortcut for tools, menus and controls, in English and Portuguese; a hint for the current tool in the status bar and the options bar.
 - Live presence: a name and color asked before the first session, smooth friend cursors with their tool, brush size and what they are doing, their selections, a dot on the layer they work on, and a people list with tool, layer, microphone, camera, follow and go to cursor.
 - The tour has Back, Escape and the arrow keys, follows window resizes and only points at what is on screen.
+- A full keyboard set: Delete removes the selected pixels or the layer, paste in place, Ctrl+Y redo, F2 rename, Alt+[ and ] to walk the layers, Shift+[ and ] for hardness, 0 to 9 for opacity; every shortcut shows in the menus, the tooltips and Help, and can be changed from Settings.
+- The Activity panel: who did what and when, in plain words, shared in live sessions, with a filter by person, a click to select the layer and an export as text; history steps carry their author.
 
 ### Fixed
 
@@ -24,6 +26,7 @@ All notable changes to pixelotter are documented here. The format follows [Keep 
 - Quick select never found the subject.
 - Content aware fill with everything selected failed; it now explains that some pixels must stay outside the selection.
 - The blend mode list looked empty and the angle label was cut off in Portuguese.
+- Ctrl+Shift+E exported instead of merging the visible layers, and Ctrl+Y now redoes (proof colors moved to Ctrl+Alt+Y).
 
 ## [0.1.0] - 2026-10-16
 

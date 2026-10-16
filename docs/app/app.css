@@ -512,7 +512,10 @@ input[type='color']::-webkit-color-swatch { border: 0; border-radius: 2px; }
 .shortcut-cols dl { break-inside: avoid; margin: 0 0 16px; }
 .sc-head { margin-bottom: 6px; color: var(--primary); font-weight: 600; }
 .sc-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--hair); font-size: 12.5px; }
-.sc-row dd { margin: 0; }
+.sc-row dd { display: flex; gap: 6px; align-items: center; margin: 0; }
+.sc-row .sc-edit { opacity: 0; }
+.sc-row:hover .sc-edit, .sc-row .sc-edit:focus-visible, .sc-row.recording .sc-edit { opacity: 1; }
+.sc-row.recording kbd { outline: 2px solid var(--primary); }
 .about-head { display: flex; gap: 16px; align-items: center; }
 .about-head p { margin: 2px 0; }
 .about h3 { margin: 18px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
@@ -693,3 +696,14 @@ body[data-workspace='quick'] .optbar { display: none; }
 .name-colors .sw-pick { width: 28px; height: 28px; padding: 0; border: 2px solid transparent; border-radius: 50%; cursor: pointer; }
 .name-colors .sw-pick.on { border-color: var(--foreground); box-shadow: 0 0 0 2px var(--surface) inset; }
 .name-preview { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 4px 10px; border-radius: 6px; color: #0c0c0d; font: 600 12px/1.2 var(--sans); }
+
+/* activity: who did what */
+.p-activity { display: flex; flex-direction: column; gap: 6px; }
+.activity-bar { display: flex; gap: 6px; align-items: center; }
+.activity-bar .select { flex: 1; min-width: 0; }
+.activity-list { margin: 0; padding: 0; list-style: none; }
+.activity-list button { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: start; width: 100%; padding: 5px 4px; border: 0; border-bottom: 1px solid var(--hair); background: none; color: var(--foreground); font-size: 12px; line-height: 1.35; text-align: left; cursor: pointer; }
+.activity-list button:hover { background: var(--hover); }
+.activity-list button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.activity-list time { color: var(--muted-foreground); font: 11px/1.35 var(--mono); }
+.hist-author { width: 8px; height: 8px; margin-left: auto; border-radius: 50%; flex: none; }

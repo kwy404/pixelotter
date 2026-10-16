@@ -20,7 +20,7 @@ import { makeCanvas } from './engine/assets.js';
 import { exportDocument, saveExport, saveProject } from './files.js';
 import { filterLayerOps } from './commands.js';
 import { press } from './engine/render.js';
-import { keyLabel, MENUS } from './commands.js';
+import { comboOf, keyLabel, MENUS } from './commands.js';
 import { stunCheck } from './live.js';
 
 export const PRESETS = [
@@ -879,14 +879,75 @@ export function installDialogs(ctx) {
         .flat(2)
         .filter((x) => typeof x === 'string' && x !== '-' && !x.startsWith('menu.'))
         .map((id) => ({ id, c: app.commands.list.get(id.split(':')[0]) }))
-        .filter((r) => r.c?.key)
-        .map((r) => ({ id: r.id, label: t(`cmd.${r.id}`), key: keyLabel(r.c.key.split(' | ')[0]) })),
+        // every command, so a key can be given to one that has none
+        .filter((r) => r.c && !r.id.includes(':'))
+        .map((r) => ({ id: r.id, label: t(`cmd.${r.id}`), key: r.c.key ? r.c.key.split(' | ').map(keyLabel).join(', ') : '' })),
     })).filter((s) => s.rows.length);
     // tool letters come from the toolbox groups (Shift and the letter cycles a group)
-    sections.push({ title: 'menu.tools', rows: S.toolGroups.flatMap((g) => g.tools.map((id) => ({ id, label: t(`tool.${id}`), key: g.tools.length > 1 ? `${g.key.toUpperCase()}, Shift+${g.key.toUpperCase()}` : g.key.toUpperCase() }))) });
+    sections.push({ title: 'menu.tools', rows: S.toolGroups.flatMap((g) => g.tools.map((id) => ({ id, label: t(`tool.${id}`), key: g.tools.length > 1 ? `${g.key.toUpperCase()}, Shift+${g.key.toUpperCase()}` : g.key.toUpperCase(), fixed: true }))) });
+    // single keys that work on the canvas
+    sections.push({
+      title: 'keys.canvas',
+      rows: [
+        ['keys.space', 'Space'],
+        ['keys.size', '[ ]'],
+        ['keys.hardness', 'Shift+[ ]'],
+        ['keys.opacity', '1 ... 9, 0'],
+        ['keys.swap', 'X'],
+        ['keys.default', 'D'],
+        ['keys.nudge', '\u2190 \u2191 \u2192 \u2193, Shift'],
+        ['keys.enter', 'Enter'],
+        ['keys.escape', 'Esc'],
+        ['keys.panels', 'Tab'],
+      ].map(([k, key]) => ({ id: k, label: t(k), key, fixed: true })),
+    });
     S.shortcutList = sections;
+    S.keyRecording = null;
     ui.openDialog('dlg-shortcuts');
   };
+  // your own keys: Change on a row, then press the new combination (Escape cancels,
+  // Backspace removes the key); kept in this browser
+  const KEYS = 'pixelotter:keys';
+  const loadKeys = () => {
+    try {
+      return JSON.parse(localStorage.getItem(KEYS) || '{}') || {};
+    } catch {
+      return {};
+    }
+  };
+  app.commands.applyKeys(loadKeys());
+  globals.recordKey = (id) => (S.keyRecording = S.keyRecording === id ? null : id);
+  globals.resetKeys = () => {
+    try {
+      localStorage.removeItem(KEYS);
+    } catch {
+      // private mode
+    }
+    app.commands.applyKeys({});
+    ui.shortcutsDialog();
+    S.menuBar = [...S.menuBar];
+  };
+  window.addEventListener('keydown', (e) => {
+    const id = S.keyRecording;
+    if (!id || !document.getElementById('dlg-shortcuts')?.open) return;
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.key === 'Escape') {
+      S.keyRecording = null;
+      return;
+    }
+    const custom = loadKeys();
+    custom[id] = e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey ? '' : comboOf(e);
+    try {
+      localStorage.setItem(KEYS, JSON.stringify(custom));
+    } catch {
+      // private mode: the key works until the page closes
+    }
+    app.commands.applyKeys(custom);
+    ui.shortcutsDialog();
+    S.menuBar = [...S.menuBar];
+  }, true);
   ui.aboutDialog = () => {
     S.modelMb = (MODEL.bytes / 1e6).toFixed(1);
     S.runtimeMb = (RUNTIME.bytes / 1e6).toFixed(1);
