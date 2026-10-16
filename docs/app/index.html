@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="dark light">
+<script>(function(){try{var t=localStorage.getItem('voodoo:theme');if(t&&t.charAt(0)==='"')t=JSON.parse(t);var r=document.documentElement;if(t==='light'||t==='dark'){r.setAttribute('data-theme',t);r.style.colorScheme=t}else{r.removeAttribute('data-theme')}}catch(e){}})();</script>
+<title>pixelotter editor</title>
+<meta name="description" content="A layered photo editor that runs in your browser and works offline: adjustments, masks, background removal, stickers, text, filters and live editing with friends.">
+<link rel="canonical" href="https://kwy404.github.io/pixelotter/app/">
+<meta name="theme-color" content="#f3f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monsooncss@0.2.0/dist/monsoon.min.css">
+<link rel="stylesheet" href="app.css">
+<script src="https://cdn.jsdelivr.net/npm/voodoojs@1.0.0/dist/voodoo.full.min.js" data-manual defer></script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body class="px antialiased" data-workspace="pro">
+
+<!-- Loading screen -->
+<div id="loader" class="loader" role="status" aria-live="polite">
+  <div class="loader-card">
+    <img class="loader-otto" src="art/otto-loader.svg" width="170" height="160" alt="">
+    <p class="loader-name">pixelotter</p>
+    <div class="loader-bar"><span id="loader-fill"></span></div>
+    <p id="loader-step" class="loader-step">Opening the darkroom</p>
+  </div>
+</div>
+
+<div id="app" class="shell" v-cloak>
+
+  <!-- Application bar -->
+  <header class="appbar" @keydown.escape="closeMenus()">
+    <button type="button" class="brand-btn" @click="goHome()" :aria-label="$t('home.title')" :title="$t('home.title')"><img src="icons/icon.svg" width="26" height="26" alt=""></button>
+    <nav class="menubar" role="menubar" :aria-label="$t('menu.bar')" v-show="S.workspace === 'pro'">
+      <div class="menu-root" v-for="(m, i) in S.menuBar" :key="m.label">
+        <button type="button" class="menu-top" role="menuitem" aria-haspopup="true" :aria-expanded="S.menuOpen === i ? 'true' : 'false'" :class="{ open: S.menuOpen === i }" @click="toggleMenu(i)" @mouseenter="hoverMenu(i)" :data-menu="m.id">{ $t(m.label) }</button>
+      </div>
+    </nav>
+    <div class="appbar-mid" v-show="S.workspace === 'quick'"><span class="appbar-title">{ S.doc.name || $t('app.name') }</span></div>
+    <div class="appbar-end">
+      <div class="segmented segmented-sm ws-switch" role="radiogroup" :aria-label="$t('workspace.label')">
+        <label class="segmented-item" :title="$t('workspace.proHint')"><input type="radio" name="ws" value="pro" :checked="S.workspace === 'pro'" @change="setWorkspace('pro')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-pro"/></svg><span class="hide-sm">{ $t('workspace.pro') }</span></label>
+        <label class="segmented-item" :title="$t('workspace.quickHint')"><input type="radio" name="ws" value="quick" :checked="S.workspace === 'quick'" @change="setWorkspace('quick')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-quick"/></svg><span class="hide-sm">{ $t('workspace.quick') }</span></label>
+      </div>
+      <div class="peers" v-show="S.live.mode === 'host' || S.live.mode === 'guest'">
+        <span class="peer-dot" v-for="p in S.live.peers" :key="p.id" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }" :title="p.name">{ p.name.slice(0, 1).toUpperCase() }</span>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" @click="run('file.share')" :disabled="!S.doc.name" data-action="share"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg><span class="hide-sm">{ S.live.mode === 'off' ? $t('live.share') : $t('live.session') }</span></button>
+      <button type="button" class="btn btn-sm btn-primary" @click="run('file.export')" :disabled="!S.doc.name" data-action="export"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-export"/></svg><span class="hide-sm">{ $t('export.button') }</span></button>
+      <button type="button" class="icon-btn theme-btn" v-theme-toggle.cycle :aria-label="$t('theme.switch')" :title="$t('theme.switch')"><svg class="ic ti-system" aria-hidden="true"><use href="icons.svg#i-aperture"/></svg><svg class="ic ti-light" aria-hidden="true"><use href="icons.svg#i-sparkle"/></svg><svg class="ic ti-dark" aria-hidden="true"><use href="icons.svg#i-proof"/></svg></button>
+    </div>
+    <!-- open menu -->
+    <div class="menu-pop" v-show="S.menuOpen !== null" :style="{ left: S.menuX + 'px' }" role="menu" @mouseleave="leaveMenu()">
+      <div class="mi" v-for="(it, j) in S.menuItems" :key="j">
+        <div class="menu-sep" v-if="it.type === 'sep'" role="separator"></div>
+        <button type="button" class="menu-row" v-else-if="it.type === 'cmd'" role="menuitem" :disabled="!it.enabled" @click="menuRun(it)" @mouseenter="S.subOpen = null" :data-cmd="it.id"><span class="menu-check"><svg class="ic" v-show="it.checked" aria-hidden="true"><use href="icons.svg#i-check"/></svg></span><span class="menu-label">{ it.label }</span><span class="menu-key">{ it.key }</span></button>
+        <div class="menu-row menu-sub" v-else role="menuitem" aria-haspopup="true" @mouseenter="openSub(j, $el)" @click="openSub(j, $el)" :class="{ open: S.subOpen === j }"><span class="menu-check"></span><span class="menu-label">{ it.label }</span><svg class="ic menu-arrow" aria-hidden="true"><use href="icons.svg#i-chevron-right"/></svg></div>
+      </div>
+    </div>
+    <div class="menu-pop menu-pop-sub" v-show="S.subOpen !== null" :style="{ left: S.subX + 'px', top: S.subY + 'px' }" role="menu">
+      <div class="mi" v-for="(it, j) in S.subItems" :key="j">
+        <div class="menu-sep" v-if="it.type === 'sep'"></div>
+        <button type="button" class="menu-row" v-else role="menuitem" :disabled="!it.enabled" @click="menuRun(it)" :data-cmd="it.id"><span class="menu-check"><svg class="ic" v-show="it.checked" aria-hidden="true"><use href="icons.svg#i-check"/></svg></span><span class="menu-label">{ it.label }</span><span class="menu-key">{ it.key }</span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Options bar: changes with the tool -->
+  <div class="optbar" v-show="S.workspace === 'pro' && S.screen === 'editor'" role="toolbar" :aria-label="$t('options.label')">
+    <span class="opt-tool"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(S.tool)"/></svg>{ $t('tool.' + S.tool) }</span>
+    <div class="opt-group" v-show="['brush','pencil','eraser','clone','spot-heal','heal','dodge','burn','sponge','blur','sharpen','smudge','quick-select'].includes(S.tool)">
+      <label class="opt"><span>{ $t('opt.size') }</span><input type="range" class="range range-xs" min="1" max="800" v-model.number="S.options[S.tool].size"><input class="num" type="number" min="1" max="2000" v-model.number="S.options[S.tool].size" aria-label="Size in pixels">px</label>
+      <label class="opt" v-show="S.tool !== 'pencil' && S.tool !== 'quick-select'"><span>{ $t('opt.hardness') }</span><input type="range" class="range range-xs" min="0" max="1" step="0.01" v-model.number="S.options[S.tool].hardness"></label>
+      <label class="opt" v-show="!['quick-select','spot-heal','smudge'].includes(S.tool)"><span>{ $t('opt.opacity') }</span><input type="range" class="range range-xs" min="0.01" max="1" step="0.01" v-model.number="S.options[S.tool].opacity"><b>{ Math.round(S.options[S.tool].opacity * 100) }%</b></label>
+      <label class="opt" v-show="!['quick-select','spot-heal'].includes(S.tool)"><span>{ $t('opt.flow') }</span><input type="range" class="range range-xs" min="0.01" max="1" step="0.01" v-model.number="S.options[S.tool].flow"><b>{ Math.round(S.options[S.tool].flow * 100) }%</b></label>
+      <label class="opt" v-show="S.tool === 'dodge' || S.tool === 'burn'"><span>{ $t('opt.range') }</span><select class="select select-xs" v-model="S.options[S.tool].range"><option value="shadows">{ $t('opt.shadows') }</option><option value="midtones">{ $t('opt.midtones') }</option><option value="highlights">{ $t('opt.highlights') }</option></select></label>
+      <label class="opt" v-show="S.tool === 'dodge' || S.tool === 'burn'"><span>{ $t('opt.exposure') }</span><input type="range" class="range range-xs" min="0.05" max="1" step="0.01" v-model.number="S.options[S.tool].exposure"></label>
+      <label class="opt" v-show="S.tool === 'sponge'"><span>{ $t('opt.mode') }</span><select class="select select-xs" v-model="S.options.sponge.saturate"><option value="saturate">{ $t('opt.saturate') }</option><option value="desaturate">{ $t('opt.desaturate') }</option></select></label>
+      <label class="opt" v-show="S.tool === 'clone' || S.tool === 'heal'"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options[S.tool].aligned"><span>{ $t('opt.aligned') }</span></label>
+      <span class="opt-hint" v-show="S.tool === 'clone' || S.tool === 'heal'">{ $t('opt.cloneHint') }</span>
+      <label class="opt" v-show="S.tool === 'brush'"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.brush.pressureSize"><span>{ $t('opt.pressure') }</span></label>
+    </div>
+    <div class="opt-group" v-show="['marquee','marquee-ellipse','lasso','lasso-poly','wand','quick-select'].includes(S.tool)">
+      <div class="segmented segmented-xs" role="radiogroup" :aria-label="$t('opt.selMode')">
+        <label class="segmented-item" v-for="m in ['replace','add','subtract','intersect']" :key="m" :title="$t('opt.sel.' + m)"><input type="radio" :name="'selmode'" :value="m" :checked="S.options[S.tool].mode === m" @change="S.options[S.tool].mode = m">{ $t('opt.sel.' + m) }</label>
+      </div>
+      <label class="opt" v-show="S.tool !== 'quick-select' && S.tool !== 'wand'"><span>{ $t('opt.feather') }</span><input class="num" type="number" min="0" max="250" v-model.number="S.options[S.tool].feather">px</label>
+      <label class="opt" v-show="S.tool === 'marquee' || S.tool === 'marquee-ellipse'"><span>{ $t('opt.ratio') }</span><select class="select select-xs" v-model="S.options[S.tool].ratio"><option value="free">{ $t('opt.free') }</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select></label>
+      <label class="opt" v-show="S.tool === 'wand' || S.tool === 'quick-select'"><span>{ $t('opt.tolerance') }</span><input class="num" type="number" min="0" max="255" v-model.number="S.options[S.tool].tolerance"></label>
+      <label class="opt" v-show="S.tool === 'wand'"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.wand.contiguous"><span>{ $t('opt.contiguous') }</span></label>
+      <label class="opt" v-show="S.tool === 'wand'"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.wand.sampleAll"><span>{ $t('opt.sampleAll') }</span></label>
+      <button type="button" class="btn btn-xs btn-soft" @click="run('select.subject')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-subject"/></svg>{ $t('menu.select.subject') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="run('select.refine')" :disabled="!S.selection.active">{ $t('cmd.select.refine') }</button>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'move'">
+      <label class="opt"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.move.autoSelect"><span>{ $t('opt.autoSelect') }</span></label>
+      <label class="opt"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.move.showTransform"><span>{ $t('opt.showTransform') }</span></label>
+      <span class="opt-sep"></span>
+      <button type="button" class="icon-btn sm" v-for="a in ['left','hcenter','right','top','vcenter','bottom']" :key="a" @click="align(a)" :title="$t('align.' + a)" :aria-label="$t('align.' + a)"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + alignIcon(a)"/></svg></button>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'crop'">
+      <label class="opt"><span>{ $t('opt.ratio') }</span><select class="select select-xs" v-model="S.options.crop.ratio"><option value="free">{ $t('opt.free') }</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="3:2">3:2</option><option value="16:9">16:9</option><option value="9:16">9:16</option></select></label>
+      <label class="opt"><span>{ $t('opt.straighten') }</span><input type="range" class="range range-xs" min="-45" max="45" step="0.1" .value="S.cropAngle" @input="straighten($event.target.value)"><b>{ S.cropAngle }&deg;</b></label>
+      <button type="button" class="btn btn-xs btn-primary" @click="cropCommit()" data-action="crop-apply"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-check"/></svg>{ $t('opt.apply') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="cropCancel()">{ $t('dialog.cancel') }</button>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'text'">
+      <label class="opt"><select class="select select-xs" v-model="S.options.text.font" @change="textOpt('font')" :aria-label="$t('opt.font')"><option v-for="f in S.fonts" :key="f" :value="f">{ f }</option></select></label>
+      <label class="opt"><select class="select select-xs" v-model.number="S.options.text.weight" @change="textOpt('weight')" :aria-label="$t('opt.weight')"><option v-for="w in [400,500,600,700,800,900]" :key="w" :value="w">{ w }</option></select></label>
+      <label class="opt"><input class="num" type="number" min="4" max="2000" v-model.number="S.options.text.size" @change="textOpt('size')" :aria-label="$t('opt.size')">px</label>
+      <div class="segmented segmented-xs" role="radiogroup" :aria-label="$t('opt.align')"><label class="segmented-item" v-for="a in ['left','center','right']" :key="a"><input type="radio" name="talign" :value="a" :checked="S.options.text.align === a" @change="S.options.text.align = a; textOpt('align')">{ $t('align.' + a) }</label></div>
+      <label class="opt"><span>{ $t('opt.preset') }</span><select class="select select-xs" v-model="S.options.text.preset" @change="textOpt('preset')"><option value="">{ $t('opt.none') }</option><option v-for="p in S.textPresets" :key="p.id" :value="p.id">{ $t('preset.' + p.id) }</option></select></label>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'shape'">
+      <div class="segmented segmented-xs" role="radiogroup" :aria-label="$t('opt.shape')"><label class="segmented-item" v-for="s in ['rect','ellipse','line','arrow','star','heart','triangle']" :key="s" :title="$t('shape.' + s)"><input type="radio" name="shapek" :value="s" :checked="S.options.shape.shape === s" @change="S.options.shape.shape = s">{ $t('shape.' + s) }</label></div>
+      <label class="opt"><span>{ $t('opt.stroke') }</span><input class="num" type="number" min="0" max="200" v-model.number="S.options.shape.strokeWidth">px</label>
+      <label class="opt" v-show="S.options.shape.shape === 'rect'"><span>{ $t('opt.radius') }</span><input class="num" type="number" min="0" max="2000" v-model.number="S.options.shape.radius">px</label>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'gradient'">
+      <div class="segmented segmented-xs" role="radiogroup"><label class="segmented-item"><input type="radio" name="gt" :checked="S.options.gradient.type === 'linear'" @change="S.options.gradient.type = 'linear'">{ $t('opt.linear') }</label><label class="segmented-item"><input type="radio" name="gt" :checked="S.options.gradient.type === 'radial'" @change="S.options.gradient.type = 'radial'">{ $t('opt.radial') }</label></div>
+      <label class="opt"><select class="select select-xs" v-model="S.options.gradient.colors"><option value="fg-bg">{ $t('opt.fgbg') }</option><option value="fg-transparent">{ $t('opt.fgTransparent') }</option></select></label>
+      <label class="opt"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.gradient.reverse"><span>{ $t('opt.reverse') }</span></label>
+      <label class="opt"><span>{ $t('opt.opacity') }</span><input type="range" class="range range-xs" min="0.01" max="1" step="0.01" v-model.number="S.options.gradient.opacity"></label>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'bucket'">
+      <label class="opt"><select class="select select-xs" v-model="S.options.bucket.source"><option value="fg">{ $t('opt.fgColor') }</option><option value="pattern">{ $t('opt.pattern') }</option></select></label>
+      <label class="opt" v-show="S.options.bucket.source === 'pattern'"><select class="select select-xs" v-model="S.options.bucket.pattern"><option v-for="p in S.patterns" :key="p" :value="p">{ $t('pattern.' + p) }</option></select></label>
+      <label class="opt"><span>{ $t('opt.tolerance') }</span><input class="num" type="number" min="0" max="255" v-model.number="S.options.bucket.tolerance"></label>
+      <label class="opt"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.bucket.contiguous"><span>{ $t('opt.contiguous') }</span></label>
+      <label class="opt"><input type="checkbox" class="checkbox checkbox-xs" v-model="S.options.bucket.sampleAll"><span>{ $t('opt.sampleAll') }</span></label>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'eyedropper'">
+      <label class="opt"><span>{ $t('opt.sample') }</span><select class="select select-xs" v-model.number="S.options.eyedropper.sample"><option :value="1">{ $t('opt.point') }</option><option :value="3">3 x 3</option><option :value="5">5 x 5</option><option :value="11">11 x 11</option></select></label>
+      <label class="opt"><select class="select select-xs" v-model="S.options.eyedropper.layers"><option value="all">{ $t('opt.allLayers') }</option><option value="current">{ $t('opt.currentLayer') }</option></select></label>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'pen'">
+      <span class="opt-hint">{ $t('opt.penHint') }</span>
+      <button type="button" class="btn btn-xs btn-soft" @click="run('select.fromPath')">{ $t('cmd.select.fromPath') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="pathAction('fill')">{ $t('path.fill') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="pathAction('stroke')">{ $t('path.stroke') }</button>
+    </div>
+    <div class="opt-group" v-show="S.tool === 'patch' || S.tool === 'spot-heal'"><span class="opt-hint">{ $t('opt.hint.' + S.tool) }</span></div>
+    <div class="opt-group" v-show="S.tool === 'hand' || S.tool === 'zoom'">
+      <button type="button" class="btn btn-xs btn-ghost" @click="run('view.fit')">{ $t('cmd.view.fit') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="run('view.actual')">100%</button>
+    </div>
+    <span class="opt-spacer"></span>
+    <span class="opt-edit-mask" v-show="S.maskEdit"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-mask"/></svg>{ $t('layers.editingMask') }</span>
+  </div>
+
+  <main class="work" :class="{ home: S.screen === 'home' }">
+    <!-- Tools panel -->
+    <nav class="toolbox" v-show="S.workspace === 'pro' && S.screen === 'editor'" :aria-label="$t('tools.label')">
+      <div class="tool-group" v-for="g in S.toolGroups" :key="g.id" :class="{ active: g.tools.includes(S.tool) }">
+        <button type="button" class="tool-btn" :class="{ active: g.tools.includes(S.tool) }" @click="pickGroup(g)" @contextmenu.prevent="flyout(g, $el)" @pointerdown="holdStart(g, $el)" @pointerup="holdEnd()" :title="$t('tool.' + g.current) + ' (' + g.key.toUpperCase() + ')'" :aria-label="$t('tool.' + g.current)" :data-tool="g.current" :aria-pressed="g.tools.includes(S.tool) ? 'true' : 'false'"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(g.current)"/></svg><span class="tool-tri" v-show="g.tools.length > 1" aria-hidden="true"></span></button>
+      </div>
+      <div class="swatch-pair" :title="$t('colors.hint')">
+        <button type="button" class="swatch fg" :style="{ background: S.colors.fg }" @click="pickColor('fg')" :aria-label="$t('colors.fg')"></button>
+        <button type="button" class="swatch bg" :style="{ background: S.colors.bg }" @click="pickColor('bg')" :aria-label="$t('colors.bg')"></button>
+        <button type="button" class="swatch-swap" @click="swapColors()" :aria-label="$t('colors.swap')" :title="$t('colors.swap') + ' (X)'"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-flip"/></svg></button>
+        <button type="button" class="swatch-reset" @click="resetColors()" :aria-label="$t('colors.reset')" :title="$t('colors.reset') + ' (D)'"></button>
+      </div>
+    </nav>
+    <div class="flyout" v-show="S.flyout" :style="{ top: S.flyoutY + 'px', left: S.flyoutX + 'px' }" role="menu" @mouseleave="S.flyout = null">
+      <button type="button" class="menu-row" v-for="tid in (S.flyout ? S.flyout.tools : [])" :key="tid" role="menuitem" @click="setTool(tid); S.flyout = null" :data-tool="tid"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(tid)"/></svg><span class="menu-label">{ $t('tool.' + tid) }</span><span class="menu-key">{ (S.flyout ? S.flyout.key : '').toUpperCase() }</span></button>
+    </div>
+
+    <!-- Quick workspace side -->
+    <aside class="quick" v-show="S.workspace === 'quick' && S.screen === 'editor'" :aria-label="$t('workspace.quick')">
+      <div class="quick-tabs" role="tablist">
+        <button type="button" role="tab" class="quick-tab" v-for="q in ['looks','adjust','cutout','sticker','text','shapes','size']" :key="q" :class="{ active: S.quickTab === q }" :aria-selected="S.quickTab === q ? 'true' : 'false'" @click="S.quickTab = q" :data-quick="q"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + quickIcon(q)"/></svg><span>{ $t('quick.' + q) }</span></button>
+      </div>
+      <div class="quick-body">
+        <div v-show="S.quickTab === 'looks'">
+          <button type="button" class="btn btn-block btn-primary big" @click="quickAuto()" data-action="auto-enhance"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-sparkle"/></svg>{ $t('quick.auto') }</button>
+          <div class="looks">
+            <button type="button" class="look" v-for="l in S.looks" :key="l.id" :class="{ active: S.active && S.active.look === l.id }" @click="quickLook(l.id)" :data-look="l.id"><img :src="l.thumb" alt="" width="84" height="84"><span>{ $t('look.' + l.id) }</span></button>
+          </div>
+        </div>
+        <div v-show="S.quickTab === 'adjust'">
+          <p class="quick-note" v-show="!S.active || S.active.type !== 'raster'">{ $t('quick.pickPhoto') }</p>
+          <div v-show="S.active && S.active.type === 'raster'">
+            <label class="slider" v-for="k in ['exposure','brightness','contrast','saturation','warmth','shadows','highlights','sharpen','blur','vignette','fade']" :key="k"><span>{ $t('adjust.' + k) }<b>{ S.active && S.active.adjust ? S.active.adjust[k] : 0 }</b></span><input type="range" class="range range-sm" :min="['sharpen','blur','vignette','fade'].includes(k) ? 0 : -100" max="100" :value="S.active && S.active.adjust ? S.active.adjust[k] : 0" @input="quickAdjust(k, $event.target.value)" :aria-label="$t('adjust.' + k)" :data-adjust="k"></label>
+            <button type="button" class="btn btn-sm btn-ghost" @click="quickAdjustReset()">{ $t('quick.reset') }</button>
+          </div>
+        </div>
+        <div v-show="S.quickTab === 'cutout'">
+          <p class="quick-note">{ $t('cutout.intro') }</p>
+          <button type="button" class="btn btn-block btn-primary big" @click="run('layer.removeBackground')" :disabled="!S.active || S.active.type !== 'raster'" data-action="remove-bg"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-cutout"/></svg>{ $t('cmd.layer.removeBackground') }</button>
+          <div class="model-state" v-show="S.model.state === 'loading'"><progress class="progress progress-sm" :value="Math.round(S.model.progress * 100)" max="100"></progress><span>{ $t('model.loading', { mb: S.model.mb }) }</span></div>
+          <p class="quick-error" v-show="S.model.state === 'error'" role="alert">{ S.model.error }</p>
+          <div class="refine" v-show="S.active && S.active.mask">
+            <p class="quick-sub">{ $t('cutout.refine') }</p>
+            <div class="segmented segmented-sm segmented-block" role="radiogroup"><label class="segmented-item"><input type="radio" name="refine" :checked="S.refine === 'keep'" @change="refineBrush('keep')">{ $t('cutout.keep') }</label><label class="segmented-item"><input type="radio" name="refine" :checked="S.refine === 'erase'" @change="refineBrush('erase')">{ $t('cutout.erase') }</label></div>
+            <label class="slider"><span>{ $t('cutout.brush') }<b>{ S.options.brush.size }px</b></span><input type="range" class="range range-sm" min="4" max="300" v-model.number="S.options.brush.size"></label>
+            <label class="slider"><span>{ $t('cutout.feather') }<b>{ S.active && S.active.mask ? S.active.mask.feather : 0 }px</b></span><input type="range" class="range range-sm" min="0" max="60" :value="S.active && S.active.mask ? S.active.mask.feather : 0" @input="setFeather($event.target.value)" data-action="feather"></label>
+            <button type="button" class="btn btn-sm btn-ghost" @click="run('layer.toggleMask')">{ $t('cutout.toggle') }</button>
+          </div>
+          <p class="quick-small">{ $t('cutout.model', { name: S.modelName, license: S.modelLicense }) }</p>
+        </div>
+        <div v-show="S.quickTab === 'sticker'">
+          <p class="quick-note">{ $t('sticker.intro') }</p>
+          <button type="button" class="btn btn-block btn-primary big" @click="run('file.sticker')" data-action="sticker"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-sticker"/></svg>{ $t('sticker.open') }</button>
+        </div>
+        <div v-show="S.quickTab === 'text'">
+          <div class="presets">
+            <button type="button" class="preset" v-for="p in S.textPresets" :key="p.id" @click="quickText(p.id)" :data-preset="p.id"><span :style="{ fontFamily: p.props.font, fontWeight: p.props.weight || 700, fontStyle: p.props.italic ? 'italic' : 'normal' }">{ $t('preset.' + p.id) }</span></button>
+          </div>
+        </div>
+        <div v-show="S.quickTab === 'shapes'">
+          <div class="shape-grid"><button type="button" class="shape-btn" v-for="s in ['rect','ellipse','star','heart','triangle','arrow']" :key="s" @click="quickShape(s)"><span>{ $t('shape.' + s) }</span></button></div>
+        </div>
+        <div v-show="S.quickTab === 'size'">
+          <div class="tpl-grid"><button type="button" class="tpl" v-for="tp in S.templates" :key="tp.id" @click="quickResize(tp)"><span class="tpl-box" :style="{ aspectRatio: tp.w + ' / ' + tp.h }"></span><b>{ $t('template.' + tp.id) }</b><small>{ tp.w } x { tp.h }</small></button></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center: tabs, canvas, status -->
+    <section class="midcol" :aria-label="$t('canvas.label')">
+      <div class="doc-tabs" role="tablist" v-show="S.screen === 'editor'">
+        <div class="doc-tab" v-for="tb in S.tabs" :key="tb.uid" :class="{ active: tb.active }" role="tab" :aria-selected="tb.active ? 'true' : 'false'">
+          <button type="button" class="doc-tab-name" @click="activateTab(tb.uid)"><svg class="ic" v-show="tb.shared" aria-hidden="true"><use href="icons.svg#i-collaborate"/></svg>{ tb.name }<span class="dirty" v-show="tb.dirty" :title="$t('tabs.unsaved')"></span></button>
+          <button type="button" class="doc-tab-close" @click="closeTab(tb.uid)" :aria-label="$t('tabs.close')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button>
+        </div>
+        <button type="button" class="doc-tab-new" @click="run('file.new')" :aria-label="$t('cmd.file.new')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
+      </div>
+      <div id="viewport" class="viewport" v-show="S.screen === 'editor'" :class="{ 'no-rulers': !S.view.rulers || S.workspace === 'quick' }">
+        <canvas class="vp-corner" aria-hidden="true"></canvas>
+        <canvas class="vp-ruler-x" aria-hidden="true"></canvas>
+        <canvas class="vp-ruler-y" aria-hidden="true"></canvas>
+        <div class="vp-stage" tabindex="0" :aria-label="$t('canvas.stage')">
+          <canvas class="vp-display"></canvas>
+          <canvas class="vp-overlay"></canvas>
+          <textarea id="text-editor" class="text-editor" hidden spellcheck="false" :aria-label="$t('text.edit')"></textarea>
+        </div>
+      </div>
+      <footer class="status" v-show="S.screen === 'editor'">
+        <span class="st zoom"><button type="button" class="st-btn" @click="run('view.zoomOut')" :aria-label="$t('cmd.view.zoomOut')">-</button><b>{ S.doc.zoom }%</b><button type="button" class="st-btn" @click="run('view.zoomIn')" :aria-label="$t('cmd.view.zoomIn')">+</button></span>
+        <span class="st">{ S.doc.width } x { S.doc.height } px</span>
+        <span class="st">{ $t('mode.' + S.doc.mode) }</span>
+        <span class="st hide-sm" v-show="S.status.x !== null">X { S.status.x } Y { S.status.y }</span>
+        <span class="st hide-sm" v-show="S.status.rgb">{ S.status.rgb }</span>
+        <span class="st hide-sm" v-show="S.status.cmyk && S.doc.mode === 'cmyk'">{ S.status.cmyk }</span>
+        <span class="st msg" role="status">{ S.status.message }</span>
+        <span class="st-spacer"></span>
+        <span class="st hide-sm" v-show="S.view.proof || S.doc.mode !== 'rgb'"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-proof"/></svg>{ $t('status.proof') }</span>
+        <span class="st" v-show="S.saved">{ S.saved }</span>
+      </footer>
+
+      <!-- Home -->
+      <div class="home-screen" v-show="S.screen === 'home'">
+        <div class="home-inner">
+          <div class="home-head">
+            <img class="home-otto" src="art/otto-loader.svg" width="120" height="113" alt="">
+            <div>
+              <h1>{ $t('home.title') }</h1>
+              <p class="home-lede">{ $t('home.lede') }</p>
+            </div>
+          </div>
+          <div class="home-actions">
+            <button type="button" class="home-card primary" @click="run('file.new')" data-action="new"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-file-new"/></svg><b>{ $t('home.new') }</b><small>{ $t('home.newHint') }</small></button>
+            <button type="button" class="home-card" @click="run('file.open')" data-action="open"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-open"/></svg><b>{ $t('home.open') }</b><small>{ $t('home.openHint') }</small></button>
+            <button type="button" class="home-card" @click="openSample('otter-desk')" data-action="sample"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-image"/></svg><b>{ $t('home.sample') }</b><small>{ $t('home.sampleHint') }</small></button>
+            <button type="button" class="home-card" @click="run('file.join')" data-action="join"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-words"/></svg><b>{ $t('home.join') }</b><small>{ $t('home.joinHint') }</small></button>
+          </div>
+          <h2 class="home-h">{ $t('home.templates') }</h2>
+          <div class="tpl-grid">
+            <button type="button" class="tpl" v-for="tp in S.templates" :key="tp.id" @click="newFromTemplate(tp)" :data-template="tp.id"><span class="tpl-box" :style="{ aspectRatio: tp.w + ' / ' + tp.h }"></span><b>{ $t('template.' + tp.id) }</b><small>{ tp.w } x { tp.h }</small></button>
+          </div>
+          <div class="recover" v-show="S.recover.length" role="alert">
+            <svg class="ic" aria-hidden="true"><use href="icons.svg#i-history"/></svg>
+            <span>{ $t('home.recover', { n: S.recover.length }) }</span>
+            <button type="button" class="btn btn-sm btn-primary" @click="recoverAll()">{ $t('home.recoverButton') }</button>
+          </div>
+          <h2 class="home-h">{ $t('home.recent') }</h2>
+          <div class="recent" v-show="S.recent.length">
+            <div class="recent-item" v-for="r in S.recent" :key="r.id">
+              <button type="button" class="recent-open" @click="openRecent(r.id)"><img :src="r.thumbUrl" alt="" loading="lazy"><b>{ r.name }</b><small>{ r.when }</small></button>
+              <button type="button" class="recent-del" @click="forgetRecent(r.id)" :aria-label="$t('home.forget')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="empty-state empty-state-bordered" v-show="!S.recent.length">
+            <div class="empty-state-icon"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-frame"/></svg></div>
+            <h3 class="empty-state-title">{ $t('home.emptyTitle') }</h3>
+            <p class="empty-state-description">{ $t('home.emptyText') }</p>
+          </div>
+          <p class="home-foot">{ $t('home.private') } <a href="../">{ $t('home.site') }</a></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Docked panels -->
+    <aside class="panel-dock" v-show="S.workspace === 'pro' && S.screen === 'editor'" :aria-label="$t('panels.label')">
+      <section class="panel" v-for="g in S.dock" :key="g.id" v-show="g.open" :class="{ collapsed: g.collapsed, grow: g.grow }" :data-panel-group="g.id">
+        <header class="panel-head">
+          <div class="panel-tabs" role="tablist">
+            <button type="button" class="panel-tab" v-for="p in g.tabs" :key="p" role="tab" :aria-selected="g.active === p ? 'true' : 'false'" :class="{ active: g.active === p }" @click="g.active = p; g.collapsed = false" :data-panel="p">{ $t('panel.' + p) }<span class="badge badge-xs badge-primary" v-show="p === 'live' && S.live.unread">{ S.live.unread }</span></button>
+          </div>
+          <button type="button" class="icon-btn sm" @click="g.collapsed = !g.collapsed" :aria-label="g.collapsed ? $t('panels.expand') : $t('panels.collapse')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-chevron-down"/></svg></button>
+        </header>
+        <div class="panel-body" v-show="!g.collapsed">
+
+          <!-- Color -->
+          <div v-if="g.active === 'color'" class="p-color">
+            <canvas id="color-sv" class="color-sv" width="220" height="130" @pointerdown="svDown($event)" @pointermove="svMove($event)" @pointerup="svUp()" :aria-label="$t('color.picker')"></canvas>
+            <input type="range" class="hue" min="0" max="360" .value="S.colorInfo.h" @input="setHue($event.target.value)" :aria-label="$t('color.hue')">
+            <div class="color-fields">
+              <label>{ $t('color.hex') }<input class="input input-xs" .value="S.colorInfo.hex" @change="setHex($event.target.value)" maxlength="7"></label>
+              <label>R<input class="input input-xs num" type="number" min="0" max="255" .value="S.colorInfo.r" @change="setRgb('r', $event.target.value)"></label>
+              <label>G<input class="input input-xs num" type="number" min="0" max="255" .value="S.colorInfo.g" @change="setRgb('g', $event.target.value)"></label>
+              <label>B<input class="input input-xs num" type="number" min="0" max="255" .value="S.colorInfo.b" @change="setRgb('b', $event.target.value)"></label>
+            </div>
+            <div class="cmyk-fields" :title="$t('color.cmykHint')">
+              <span>C { S.colorInfo.cmyk[0] }%</span><span>M { S.colorInfo.cmyk[1] }%</span><span>Y { S.colorInfo.cmyk[2] }%</span><span>K { S.colorInfo.cmyk[3] }%</span>
+              <svg class="ic warn" v-show="S.colorInfo.outOfGamut" aria-hidden="true"><use href="icons.svg#i-warning"/></svg><span class="gamut-note" v-show="S.colorInfo.outOfGamut">{ $t('color.outOfGamut') }</span>
+            </div>
+          </div>
+          <!-- Swatches -->
+          <div v-if="g.active === 'swatches'" class="p-swatches">
+            <button type="button" class="sw" v-for="c in S.swatches" :key="c" :style="{ background: c }" @click="setColor('fg', c)" @contextmenu.prevent="setColor('bg', c)" :title="c" :aria-label="c"></button>
+            <button type="button" class="sw add" @click="addSwatch()" :aria-label="$t('swatches.add')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
+          </div>
+
+          <!-- Properties -->
+          <div v-if="g.active === 'properties'" class="p-props">
+            <p class="panel-empty" v-show="!S.active">{ $t('props.none') }</p>
+            <div v-if="S.active">
+              <p class="props-title"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + layerIcon(S.active.type)"/></svg>{ S.active.name }</p>
+              <div class="prop-grid" v-show="!['group','adjust','fill'].includes(S.active.type)">
+                <label>X<input class="input input-xs num" type="number" .value="Math.round(S.active.x)" @change="setProp('x', +$event.target.value)"></label>
+                <label>Y<input class="input input-xs num" type="number" .value="Math.round(S.active.y)" @change="setProp('y', +$event.target.value)"></label>
+                <label>{ $t('props.w') }<input class="input input-xs num" type="number" .value="Math.round(S.active.size.w * Math.abs(S.active.scaleX))" @change="setSize('w', +$event.target.value)"></label>
+                <label>{ $t('props.h') }<input class="input input-xs num" type="number" .value="Math.round(S.active.size.h * Math.abs(S.active.scaleY))" @change="setSize('h', +$event.target.value)"></label>
+                <label>{ $t('props.angle') }<input class="input input-xs num" type="number" step="0.1" .value="S.active.rotation" @change="setProp('rotation', +$event.target.value)"></label>
+              </div>
+              <!-- text -->
+              <div v-if="S.active.type === 'text'" class="prop-stack">
+                <textarea class="textarea textarea-xs" rows="2" .value="S.active.text" @input="setProp('text', $event.target.value, 'text')" :aria-label="$t('text.content')"></textarea>
+                <div class="prop-row"><select class="select select-xs" .value="S.active.font" @change="setProp('font', $event.target.value)"><option v-for="f in S.fonts" :key="f" :value="f">{ f }</option></select><input class="input input-xs num" type="number" .value="S.active.size" @change="setProp('size', +$event.target.value)"></div>
+                <div class="prop-row"><label class="clr">{ $t('props.color') }<input type="color" .value="S.active.color" @input="setProp('color', $event.target.value, 'color')"></label><label class="clr">{ $t('props.outline') }<input type="color" .value="S.active.outline.color" @input="setProp('outline', { ...S.active.outline, color: $event.target.value }, 'outline')"></label><input class="input input-xs num" type="number" min="0" max="200" .value="S.active.outline.width" @change="setProp('outline', { ...S.active.outline, width: +$event.target.value })" :aria-label="$t('props.outlineWidth')"></div>
+                <label class="slider"><span>{ $t('props.curve') }<b>{ S.active.curve }</b></span><input type="range" class="range range-xs" min="-100" max="100" .value="S.active.curve" @input="setProp('curve', +$event.target.value, 'curve')"></label>
+                <label class="slider"><span>{ $t('props.shadow') }<b>{ S.active.shadow.blur }</b></span><input type="range" class="range range-xs" min="0" max="80" .value="S.active.shadow.blur" @input="setProp('shadow', { ...S.active.shadow, blur: +$event.target.value, color: S.active.shadow.color === '#00000000' ? '#00000099' : S.active.shadow.color }, 'shadow')"></label>
+                <label class="slider"><span>{ $t('props.spacing') }<b>{ S.active.letterSpacing }</b></span><input type="range" class="range range-xs" min="-20" max="80" .value="S.active.letterSpacing" @input="setProp('letterSpacing', +$event.target.value, 'spacing')"></label>
+                <div class="prop-row"><select class="select select-xs" .value="S.active.bubble.style" @change="setProp('bubble', { ...S.active.bubble, style: $event.target.value })" :aria-label="$t('props.bubble')"><option value="none">{ $t('bubble.none') }</option><option value="box">{ $t('bubble.box') }</option><option value="pill">{ $t('bubble.pill') }</option><option value="speech">{ $t('bubble.speech') }</option><option value="thought">{ $t('bubble.thought') }</option></select><label class="clr"><input type="color" .value="S.active.bubble.color.slice(0, 7)" @input="setProp('bubble', { ...S.active.bubble, color: $event.target.value }, 'bubble')" :aria-label="$t('props.bubbleColor')"></label></div>
+              </div>
+              <!-- shape -->
+              <div v-if="S.active.type === 'shape'" class="prop-stack">
+                <div class="prop-row"><label class="clr">{ $t('props.fill') }<input type="color" .value="S.active.fillColor || '#000000'" @input="setProp('fillColor', $event.target.value, 'fillc')"></label><label class="clr">{ $t('props.stroke') }<input type="color" .value="S.active.stroke || '#ffffff'" @input="setProp('stroke', $event.target.value, 'strokec')"></label><input class="input input-xs num" type="number" min="0" max="400" .value="S.active.strokeWidth" @change="setProp('strokeWidth', +$event.target.value)" :aria-label="$t('props.strokeWidth')"></div>
+                <label class="slider" v-show="S.active.shape === 'rect'"><span>{ $t('opt.radius') }<b>{ S.active.radius }</b></span><input type="range" class="range range-xs" min="0" max="500" .value="S.active.radius" @input="setProp('radius', +$event.target.value, 'radius')"></label>
+              </div>
+              <!-- fill layer -->
+              <div v-if="S.active.type === 'fill'" class="prop-stack">
+                <select class="select select-xs" .value="S.active.fillType" @change="setProp('fillType', $event.target.value)"><option value="solid">{ $t('fill.solid') }</option><option value="gradient">{ $t('fill.gradient') }</option><option value="pattern">{ $t('fill.pattern') }</option></select>
+                <label class="clr" v-show="S.active.fillType === 'solid'">{ $t('props.color') }<input type="color" .value="S.active.color" @input="setProp('color', $event.target.value, 'fillcolor')"></label>
+                <div v-show="S.active.fillType === 'gradient'" class="prop-row"><input type="color" .value="S.active.gradient.stops[0].color" @input="setGradientStop(0, $event.target.value)" aria-label="Start"><input type="color" .value="S.active.gradient.stops[S.active.gradient.stops.length - 1].color" @input="setGradientStop(-1, $event.target.value)" aria-label="End"><select class="select select-xs" .value="S.active.gradient.type" @change="setProp('gradient', { ...S.active.gradient, type: $event.target.value })"><option value="linear">{ $t('opt.linear') }</option><option value="radial">{ $t('opt.radial') }</option></select><input class="input input-xs num" type="number" .value="S.active.gradient.angle" @change="setProp('gradient', { ...S.active.gradient, angle: +$event.target.value })" :aria-label="$t('props.angle')"></div>
+                <select class="select select-xs" v-show="S.active.fillType === 'pattern'" .value="S.active.pattern.id" @change="setProp('pattern', { ...S.active.pattern, id: $event.target.value })"><option v-for="p in S.patterns" :key="p" :value="p">{ $t('pattern.' + p) }</option></select>
+              </div>
+              <!-- adjustment layer: the filter's own controls -->
+              <div v-if="S.active.type === 'adjust'" class="prop-stack"><p class="hint">{ $t('filter.' + S.active.filter) }</p><button type="button" class="btn btn-xs btn-soft" @click="editAdjustment()" data-action="edit-adjustment"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-adjust"/></svg>{ $t('props.editSettings') }</button><label class="slider"><span>{ $t('layers.opacity') }<b>{ Math.round(S.active.opacity * 100) }%</b></span><input type="range" class="range range-xs" min="0" max="1" step="0.01" .value="S.active.opacity" @input="setProp('opacity', +$event.target.value, 'opacity')"></label></div>
+              <!-- raster: tone sliders -->
+              <div v-if="S.active.type === 'raster'" class="prop-stack">
+                <label class="slider" v-for="k in ['exposure','contrast','saturation','warmth','shadows','highlights']" :key="k"><span>{ $t('adjust.' + k) }<b>{ S.active.adjust[k] }</b></span><input type="range" class="range range-xs" min="-100" max="100" .value="S.active.adjust[k]" @input="quickAdjust(k, $event.target.value)"></label>
+                <label class="slider" v-show="S.active.mask"><span>{ $t('cutout.feather') }<b>{ S.active.mask ? S.active.mask.feather : 0 }</b></span><input type="range" class="range range-xs" min="0" max="100" .value="S.active.mask ? S.active.mask.feather : 0" @input="setFeather($event.target.value)"></label>
+              </div>
+              <button type="button" class="btn btn-xs btn-ghost" @click="run('layer.style')" v-show="!['group','adjust'].includes(S.active.type)"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg>{ $t('cmd.layer.style') }</button>
+            </div>
+          </div>
+
+          <!-- Adjustments: new adjustment layers -->
+          <div v-if="g.active === 'adjustments'" class="p-adjustments">
+            <p class="panel-hint">{ $t('adjustments.hint') }</p>
+            <div class="adj-grid"><button type="button" class="adj-btn" v-for="a in S.adjustmentList" :key="a" @click="run('layer.newAdjustment', a)" :title="$t('filter.' + a)" :data-adjustment="a">{ $t('filter.' + a) }</button></div>
+          </div>
+
+          <!-- Info -->
+          <div v-if="g.active === 'info'" class="p-info">
+            <dl><dt>{ $t('info.cursor') }</dt><dd>{ S.status.x === null ? '-' : S.status.x + ', ' + S.status.y }</dd><dt>RGB</dt><dd>{ S.status.rgb || '-' }</dd><dt>CMYK</dt><dd>{ S.status.cmyk || '-' }</dd><dt>{ $t('info.document') }</dt><dd>{ S.doc.width } x { S.doc.height } px, { S.doc.dpi } dpi</dd><dt>{ $t('info.selection') }</dt><dd>{ S.selection.active ? $t('info.yes') : $t('info.no') }</dd></dl>
+          </div>
+
+          <!-- Layers -->
+          <div v-if="g.active === 'layers'" class="p-layers">
+            <div class="layer-controls" v-show="S.active">
+              <select class="select select-xs blend" .value="S.active ? S.active.blend : 'normal'" @change="setProp('blend', $event.target.value)" :aria-label="$t('layers.blend')" data-control="blend"><option v-for="b in S.blendModes" :key="b" :value="b">{ $t('blend.' + b) }</option></select>
+              <label class="mini">{ $t('layers.opacity') }<input class="num" type="number" min="0" max="100" .value="S.active ? Math.round(S.active.opacity * 100) : 100" @change="setProp('opacity', $event.target.value / 100)" data-control="opacity">%</label>
+              <label class="mini">{ $t('layers.fill') }<input class="num" type="number" min="0" max="100" .value="S.active ? Math.round(S.active.fill * 100) : 100" @change="setProp('fill', $event.target.value / 100)">%</label>
+            </div>
+            <ul class="layer-list" role="listbox" :aria-label="$t('panel.layers')" @dragover.prevent @drop.prevent="dropLayer($event, null)">
+              <li class="layer-row" v-for="l in S.layers" :key="l.id" :class="{ active: l.active, 'is-hidden': !l.visible, held: l.holder }" :style="{ paddingLeft: (8 + l.depth * 14) + 'px' }" role="option" :aria-selected="l.active ? 'true' : 'false'" draggable="true" @dragstart="dragLayer($event, l.id)" @dragover.prevent @drop.prevent.stop="dropLayer($event, l.id)" @click="selectLayer(l.id)" @dblclick="renameLayerInline(l.id)" :data-layer="l.id">
+                <button type="button" class="eye" @click.stop="toggleVisible(l.id)" :aria-label="l.visible ? $t('layers.hide') : $t('layers.show')"><svg class="ic" aria-hidden="true"><use :href="l.visible ? 'icons.svg#i-eye' : 'icons.svg#i-eye-off'"/></svg></button>
+                <button type="button" class="twist" v-show="l.type === 'group'" @click.stop="toggleCollapse(l.id)" :aria-label="$t('layers.toggleGroup')"><svg class="ic" aria-hidden="true"><use :href="l.collapsed ? 'icons.svg#i-chevron-right' : 'icons.svg#i-chevron-down'"/></svg></button>
+                <span class="clip-mark" v-show="l.clip" aria-hidden="true"></span>
+                <span class="thumb" :class="{ 'is-mask-off': l.maskActive }"><img v-show="l.thumb" :src="l.thumb" alt=""><svg class="ic" v-show="!l.thumb" aria-hidden="true"><use :href="'icons.svg#i-' + layerIcon(l.type)"/></svg></span>
+                <span class="thumb mask" v-show="l.hasMask" :class="{ active: l.maskActive, off: !l.maskEnabled }" @click.stop="editMask(l.id)" :title="$t('layers.mask')"><img :src="l.maskThumb" alt=""></span>
+                <span class="layer-name">{ l.name }</span>
+                <span class="holder" v-show="l.holder" :style="{ background: l.holder ? l.holder.color : '' }" :title="l.holder ? $t('layers.heldBy', { name: l.holder.name }) : ''">{ l.holder ? l.holder.name.slice(0, 1) : '' }</span>
+                <svg class="ic fx" v-show="l.styled" aria-hidden="true"><use href="icons.svg#i-fx"/></svg>
+                <button type="button" class="lock" @click.stop="toggleLock(l.id)" :aria-label="l.locked ? $t('layers.unlock') : $t('layers.lock')"><svg class="ic" aria-hidden="true"><use :href="l.locked ? 'icons.svg#i-lock' : 'icons.svg#i-unlock'"/></svg></button>
+              </li>
+            </ul>
+            <p class="panel-empty" v-show="!S.layers.length">{ $t('layers.empty') }</p>
+            <footer class="layer-foot">
+              <button type="button" class="icon-btn sm" @click="run('layer.style')" :title="$t('cmd.layer.style')" :aria-label="$t('cmd.layer.style')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-fx"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.addMask', 'auto')" :title="$t('cmd.layer.addMask')" :aria-label="$t('cmd.layer.addMask')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-mask"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="togglePanelTab('adjustments')" :title="$t('panel.adjustments')" :aria-label="$t('panel.adjustments')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-adjust-layer"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.newGroup')" :title="$t('cmd.layer.newGroup')" :aria-label="$t('cmd.layer.newGroup')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-folder"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.new')" :title="$t('cmd.layer.new')" :aria-label="$t('cmd.layer.new')" data-action="new-layer"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
+              <button type="button" class="icon-btn sm" @click="run('layer.delete')" :title="$t('cmd.layer.delete')" :aria-label="$t('cmd.layer.delete')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-trash"/></svg></button>
+            </footer>
+          </div>
+
+          <!-- Paths -->
+          <div v-if="g.active === 'paths'" class="p-paths">
+            <ul class="list-plain"><li v-for="p in S.doc.paths" :key="p.id" :class="{ active: p.active }"><button type="button" @click="selectPath(p.id)"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-pen"/></svg>{ p.name }<small>{ p.points } { $t('paths.points') }</small></button></li></ul>
+            <p class="panel-empty" v-show="!S.doc.paths || !S.doc.paths.length">{ $t('paths.empty') }</p>
+            <footer class="layer-foot"><button type="button" class="btn btn-xs btn-ghost" @click="run('select.fromPath')">{ $t('cmd.select.fromPath') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('fill')">{ $t('path.fill') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('stroke')">{ $t('path.stroke') }</button><button type="button" class="btn btn-xs btn-ghost" @click="pathAction('delete')">{ $t('path.delete') }</button></footer>
+          </div>
+
+          <!-- History -->
+          <div v-if="g.active === 'history'" class="p-history">
+            <ol class="history-list" :aria-label="$t('panel.history')">
+              <li v-for="h in S.history" :key="h.i" :class="{ current: h.i === S.historyIndex, future: h.i > S.historyIndex }"><button type="button" @click="goHistory(h.i)" :data-history="h.i"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + h.icon"/></svg>{ h.label }</button></li>
+            </ol>
+            <footer class="layer-foot"><button type="button" class="icon-btn sm" @click="run('edit.undo')" :disabled="!S.canUndo" :aria-label="$t('cmd.edit.undo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-undo"/></svg></button><button type="button" class="icon-btn sm" @click="run('edit.redo')" :disabled="!S.canRedo" :aria-label="$t('cmd.edit.redo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-redo"/></svg></button></footer>
+          </div>
+
+          <!-- Actions -->
+          <div v-if="g.active === 'actions'" class="p-actions">
+            <ul class="list-plain"><li v-for="a in S.actions" :key="a.id"><button type="button" @click="run('action.play', a.id)" :title="$t('actions.play')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-play"/></svg>{ a.name }<small>{ a.steps.length } { $t('actions.steps') }</small></button></li></ul>
+            <p class="panel-empty" v-show="!S.actions.length">{ $t('actions.empty') }</p>
+            <footer class="layer-foot">
+              <button type="button" class="btn btn-xs" :class="S.recording ? 'btn-danger' : 'btn-ghost'" @click="run(S.recording ? 'action.stop' : 'action.record')"><svg class="ic" aria-hidden="true"><use :href="S.recording ? 'icons.svg#i-stop' : 'icons.svg#i-record'"/></svg>{ S.recording ? $t('actions.stop') : $t('actions.record') }</button>
+            </footer>
+          </div>
+
+          <!-- Live session: people, chat and call -->
+          <div v-if="g.active === 'live'" class="p-live">
+            <div v-show="S.live.mode === 'off'" class="live-off">
+              <p>{ $t('live.intro') }</p>
+              <button type="button" class="btn btn-sm btn-primary" @click="run('file.share')">{ $t('live.share') }</button>
+              <button type="button" class="btn btn-sm btn-ghost" @click="run('file.join')">{ $t('home.join') }</button>
+            </div>
+            <div v-show="S.live.mode === 'host' || S.live.mode === 'guest'">
+              <div class="tabs tabs-xs tabs-boxed live-tabs" role="tablist">
+                <button type="button" class="tab" v-for="lt in ['people','chat','call']" :key="lt" :class="{ 'tab-active': S.liveTab === lt }" @click="S.liveTab = lt; lt === 'chat' && (S.live.unread = 0)">{ $t('live.' + lt) }</button>
+              </div>
+              <ul class="people" v-show="S.liveTab === 'people'">
+                <li v-for="p in S.live.peers" :key="p.id"><span class="peer-dot" :style="{ background: p.color }" :class="{ speaking: S.call.speaking.includes(p.id) }">{ p.name.slice(0, 1).toUpperCase() }</span><b>{ p.name }{ p.me ? ' (' + $t('live.you') + ')' : '' }</b><small>{ p.host ? $t('live.owner') : $t('live.role.' + p.role) }</small>
+                  <button type="button" class="btn btn-xs btn-ghost" v-show="!p.me" @click="followPeer(p.id)">{ S.live.follow === p.id ? $t('live.unfollow') : $t('live.follow') }</button>
+                  <select class="select select-xs" v-show="S.live.mode === 'host' && !p.host" .value="p.role" @change="setRole(p.id, $event.target.value)" :aria-label="$t('live.roleLabel')"><option value="edit">{ $t('live.role.edit') }</option><option value="view">{ $t('live.role.view') }</option></select>
+                </li>
+              </ul>
+              <button type="button" class="btn btn-xs btn-soft" v-show="S.live.mode === 'host' && S.liveTab === 'people'" @click="inviteMore()">{ $t('live.inviteMore') }</button>
+              <div class="chat-box" v-show="S.liveTab === 'chat'">
+                <div class="chat-log" id="chat-log" aria-live="polite">
+                  <div class="chat" v-for="m in S.chat" :key="m.id" :class="m.mine ? 'chat-end' : 'chat-start'">
+                    <div class="chat-header"><b :style="{ color: m.color }">{ m.name }</b></div>
+                    <div class="chat-reply" v-show="m.reply">{ m.reply ? m.reply.name + ': ' + m.reply.text.slice(0, 60) : '' }</div>
+                    <div class="chat-bubble"><span v-show="m.text">{ m.text }</span><img v-show="m.url" :src="m.url" alt="" class="chat-img"></div>
+                    <div class="chat-footer">
+                      <button type="button" class="react" v-for="r in m.reactions" :key="r.k" :class="{ mine: r.mine }" @click="react(m.id, r.k)"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + reactionIcon(r.k)"/></svg>{ r.n }</button>
+                      <button type="button" class="react add" @click="S.reactFor = S.reactFor === m.id ? null : m.id" :aria-label="$t('chat.react')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-plus"/></svg></button>
+                      <button type="button" class="react add" @click="S.replyTo = m.id" :aria-label="$t('chat.reply')">{ $t('chat.reply') }</button>
+                      <span class="react-pick" v-show="S.reactFor === m.id"><button type="button" class="react" v-for="k in ['heart','thumbs','laugh','star','wow']" :key="k" @click="react(m.id, k); S.reactFor = null" :aria-label="k"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + reactionIcon(k)"/></svg></button></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="chat-replying" v-show="S.replyTo">{ $t('chat.replying') } <button type="button" class="btn btn-xs btn-ghost" @click="S.replyTo = null">{ $t('dialog.cancel') }</button></div>
+                <form class="chat-form" @submit.prevent="sendChat()"><textarea id="chat-input" class="textarea textarea-xs" rows="1" :placeholder="$t('chat.placeholder')" @keydown.enter="chatEnter($event)" @paste="chatPaste($event)" :aria-label="$t('chat.placeholder')"></textarea><button class="btn btn-xs btn-primary" type="submit" :aria-label="$t('chat.send')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-send"/></svg></button></form>
+              </div>
+              <div class="call-box" v-show="S.liveTab === 'call'">
+                <div class="call-bar">
+                  <button type="button" class="btn btn-xs" :class="S.call.inCall ? 'btn-danger' : 'btn-primary'" @click="toggleCall()" data-action="call">{ S.call.inCall ? $t('call.leave') : $t('call.join') }</button>
+                  <button type="button" class="icon-btn sm" v-show="S.call.inCall" @click="toggleMute()" :class="{ off: S.call.muted }" :aria-label="S.call.muted ? $t('call.unmute') : $t('call.mute')" data-action="mute"><svg class="ic" aria-hidden="true"><use :href="S.call.muted ? 'icons.svg#i-mic-off' : 'icons.svg#i-mic'"/></svg></button>
+                  <button type="button" class="icon-btn sm" v-show="S.call.inCall" @click="toggleCamera()" :class="{ on: S.call.camera }" :aria-label="$t('call.camera')" data-action="camera"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-camera"/></svg></button>
+                  <button type="button" class="icon-btn sm" v-show="S.call.inCall" @click="toggleScreen()" :class="{ on: S.call.screen }" :aria-label="$t('call.screen')" data-action="screen"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-desktop"/></svg></button>
+                  <span class="call-proc" v-show="S.call.processing">{ $t('call.processing.' + S.call.processing) }</span>
+                </div>
+                <div class="tiles" id="call-tiles"></div>
+              </div>
+              <button type="button" class="btn btn-xs btn-ghost leave" @click="leaveLive()">{ S.live.mode === 'host' ? $t('live.end') : $t('live.leave') }</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Timeline -->
+  <section class="timeline" v-show="S.panelsOpen.timeline && S.screen === 'editor'" :aria-label="$t('panel.timeline')">
+    <header class="timeline-head"><b>{ $t('panel.timeline') }</b>
+      <button type="button" class="icon-btn sm" @click="playFrames()" :aria-label="S.playing ? $t('timeline.pause') : $t('timeline.play')"><svg class="ic" aria-hidden="true"><use :href="S.playing ? 'icons.svg#i-pause' : 'icons.svg#i-play'"/></svg></button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="addFrame()">{ $t('timeline.add') }</button>
+      <button type="button" class="btn btn-xs btn-ghost" @click="framesFromLayers()">{ $t('timeline.fromLayers') }</button>
+      <span class="opt-spacer"></span>
+      <button type="button" class="icon-btn sm" @click="togglePanel('timeline')" :aria-label="$t('dialog.close')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button>
+    </header>
+    <ol class="frames">
+      <li class="frame-cell" v-for="(f, i) in S.frames" :key="f.id" :class="{ active: S.frameIndex === i }"><button type="button" @click="showFrame(i)"><img :src="f.thumb" alt=""><span>{ i + 1 }</span></button><label>{ $t('timeline.delay') }<input class="num" type="number" min="10" max="60000" .value="f.delay" @change="setFrameDelay(i, $event.target.value)">ms</label><button type="button" class="icon-btn xs" @click="deleteFrame(i)" :aria-label="$t('timeline.delete')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-trash"/></svg></button></li>
+    </ol>
+    <p class="panel-empty" v-show="!S.frames.length">{ $t('timeline.empty') }</p>
+  </section>
+
+  <!-- Mobile bottom bar -->
+  <nav class="bottombar" v-show="S.screen === 'editor'" :aria-label="$t('tools.label')">
+    <button type="button" @click="run('edit.undo')" :disabled="!S.canUndo" :aria-label="$t('cmd.edit.undo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-undo"/></svg></button>
+    <button type="button" @click="run('edit.redo')" :disabled="!S.canRedo" :aria-label="$t('cmd.edit.redo')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-redo"/></svg></button>
+    <button type="button" v-for="tid in ['move','brush','eraser','text','crop']" :key="tid" :class="{ active: S.tool === tid }" @click="setTool(tid)" :aria-label="$t('tool.' + tid)"><svg class="ic" aria-hidden="true"><use :href="'icons.svg#i-' + toolIcon(tid)"/></svg></button>
+    <button type="button" @click="openSheet('layers')" :aria-label="$t('panel.layers')"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-layers"/></svg></button>
+  </nav>
+
+  <div class="toasts" aria-live="polite">
+    <div class="toast-item" v-for="tt in S.toasts" :key="tt.id" :class="'t-' + tt.kind" role="status"><span>{ tt.msg }</span><button type="button" class="btn btn-xs btn-ghost" v-show="tt.action" @click="toastAction(tt)">{ tt.action ? tt.action.label : '' }</button></div>
+  </div>
+  <div class="drop-hint" v-show="S.dragging"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-open"/></svg>{ $t('drop.hint') }</div>
+</div>
+
+<!-- Dialogs are filled in by js/dialogs.js -->
+<div id="dialogs"></div>
+<input type="file" id="file-input" hidden multiple>
+<input type="color" id="color-input" hidden>
+</body>
+</html>
