@@ -20,6 +20,8 @@ import { sdpFingerprint } from '../lib/fingerprint.js';
 import { encodeQr, qrSvg } from '../lib/qr.js';
 import { randomId } from '../lib/bytes.js';
 import { MessagePort } from '../lib/wire.js';
+import { packAssetOps, unpackAssetOps } from '../lib/assetwire.js';
+import { encodePng, decodePng } from '../lib/formats/png.js';
 import { HostSession, GuestSession, MAX_GUESTS, touchedLayers } from '../lib/session.js';
 import { normalizeMessage, toggleReaction } from '../lib/chat.js';
 import { fileMessage, receiveFile, fileReceipt } from '../lib/transfer.js';
@@ -64,8 +66,24 @@ export async function stunCheck(timeout = 5000) {
   return { ok: answered.length > 0, answered };
 }
 
-/** A message port over a link's binary channel. */
-function portFor(link) {
+/**
+ * Both session descriptions of a connection. On a busy machine the data channel can report
+ * open a moment before the browser lists the descriptions, so this waits a little for them.
+ */
+async function descriptions(pc) {
+  for (let i = 0; i < 60 && !(pc.localDescription && pc.remoteDescription); i++) await new Promise((r) => setTimeout(r, 50));
+  if (!pc.localDescription || !pc.remoteDescription) throw new Error('The connection has no session description');
+  return [pc.localDescription.sdp, pc.remoteDescription.sdp];
+}
+
+// one PNG per picture, however many friends it goes to
+const pngCache = new WeakMap();
+
+/**
+ * A message port over a link's binary channel. Large pictures in shared edits travel as PNG,
+ * and the progress of big messages goes to onProgress({ dir, done, total }).
+ */
+function portFor(link, onProgress = null) {
   const ch = link.files;
   const port = new MessagePort({
     send: (f) => ch.readyState === 'open' && ch.send(f),
@@ -78,12 +96,28 @@ function portFor(link) {
           resolve();
         }, { once: true });
       }),
-  });
-  const wrap = { inbox: null, send: (m) => port.send(m).catch(() => {}) };
+  }, { onProgress });
+  // messages leave and arrive in order, even while a picture is being encoded or decoded
+  let out = Promise.resolve();
+  let inbound = Promise.resolve();
+  const wrap = {
+    inbox: null,
+    send: (m) => {
+      out = out.then(async () => {
+        const packed = await packAssetOps(m, encodePng, pngCache);
+        await port.send(packed);
+      }).catch(() => {});
+      return out;
+    },
+  };
   link.onbinary = async (data) => {
     try {
       const msg = await port.receive(new Uint8Array(data));
-      if (msg) wrap.inbox?.(msg);
+      if (!msg) return;
+      inbound = inbound.then(async () => {
+        const ready = await unpackAssetOps(msg, decodePng);
+        wrap.inbox?.(ready);
+      }).catch((err) => console.warn('bad message', err));
     } catch (err) {
       console.warn('bad frame', err);
     }
@@ -121,10 +155,15 @@ class Invite extends Emitter {
     });
     this.creator.on('expired', () => this.emit('expired'));
     this.creator.on('status', (s) => this.emit('relays', s));
-    this.link.onopen = () => {
+    this.link.onopen = async () => {
       this.creator.stop();
-      this.expected = confirmWords(sdpFingerprint(this.link.pc.localDescription.sdp), sdpFingerprint(this.link.pc.remoteDescription.sdp), this.nonce);
-      this.emit('confirm');
+      try {
+        const [local, remote] = await descriptions(this.link.pc);
+        this.expected = confirmWords(sdpFingerprint(local), sdpFingerprint(remote), this.nonce);
+        this.emit('confirm');
+      } catch (err) {
+        this.emit('error', err.message);
+      }
     };
     this.link.onfail = (reason) => this.emit('error', reason);
     this.words = await this.creator.start();
@@ -206,11 +245,17 @@ class Room extends Emitter {
     const link = new RtcLink({ iceServers: this.iceServers });
     const p = { link, nonce: randomId(12), peerName: 'Friend' };
     this.pending.set(id, p);
-    link.onopen = () => {
+    link.onopen = async () => {
       if (this.pending.get(id) !== p) return;
       this.pending.delete(id);
-      const safety = confirmWords(sdpFingerprint(link.pc.localDescription.sdp), sdpFingerprint(link.pc.remoteDescription.sdp), p.nonce);
-      this.emit('guest', { link, name: p.peerName, safety });
+      try {
+        const [local, remote] = await descriptions(link.pc);
+        const safety = confirmWords(sdpFingerprint(local), sdpFingerprint(remote), p.nonce);
+        this.emit('guest', { link, name: p.peerName, safety });
+      } catch (err) {
+        console.warn('a guest connection failed', err);
+        link.close();
+      }
     };
     link.onfail = () => this.drop(id);
     const sdp = await link.offer();
@@ -246,10 +291,15 @@ class Join extends Emitter {
       this.peerName = String(msg.name ?? '').slice(0, 40) || 'Friend';
       this.link = new RtcLink({ iceServers: this.iceServers });
       this.link.polite = true;
-      this.link.onopen = () => {
+      this.link.onopen = async () => {
         this.joiner.stop();
-        this.shown = confirmWords(sdpFingerprint(this.link.pc.localDescription.sdp), sdpFingerprint(this.link.pc.remoteDescription.sdp), msg.nonce.slice(0, 64));
-        this.emit('confirm', this.shown);
+        try {
+          const [local, remote] = await descriptions(this.link.pc);
+          this.shown = confirmWords(sdpFingerprint(local), sdpFingerprint(remote), msg.nonce.slice(0, 64));
+          this.emit('confirm', this.shown);
+        } catch (err) {
+          this.emit('error', err.message);
+        }
       };
       this.link.onmessage = (text) => {
         let m;
@@ -451,7 +501,7 @@ export class Live extends Emitter {
       this.app.toast(this.app.t('live.full'), 'warning');
       return;
     }
-    const port = portFor(link);
+    const port = portFor(link, (p) => this.transferProgress(p));
     const id = await hs.addGuest(port, { name, role: this.S.settings.defaultRole ?? 'edit' });
     this.links.set(id, link);
     this.ports.set(id, port);
@@ -476,6 +526,12 @@ export class Live extends Emitter {
     this.links.delete(id);
     this.ports.delete(id);
     this.call.dropPeer(id);
+  }
+
+  /** A big shared edit (a pasted picture) on its way: the status bar shows how far it got. */
+  transferProgress({ dir, done, total }) {
+    const pct = Math.round((done / total) * 100);
+    this.set({ transfer: pct >= 100 ? null : { dir, pct } });
   }
 
   /** My step for the Activity panel of everyone in the room. */
@@ -548,7 +604,7 @@ export class Live extends Emitter {
     this.mode = 'guest';
     const edoc = new EditorDocument(createDoc({ name: app.t('live.sharedName', { name: hostName }) }));
     this.edoc = edoc;
-    const port = portFor(link);
+    const port = portFor(link, (p) => this.transferProgress(p));
     const gs = new GuestSession({ engine: edoc, port });
     this.session = gs;
     this.links.set('host', link);

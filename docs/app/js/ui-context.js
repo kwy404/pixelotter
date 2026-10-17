@@ -24,7 +24,7 @@ export function installContext(ctx) {
     if (tool === 'crop' && app.tools.get('crop')?.rect) {
       items.push({ label: t('ctx.cropApply'), key: 'Enter', run: () => globals.cropCommit() }, { label: t('ctx.cropCancel'), key: 'Esc', run: () => globals.cropCancel() }, '-');
     }
-    items.push(cmd('edit.undo'), cmd('edit.redo'), '-', cmd('edit.cut'), cmd('edit.copy'), cmd('edit.copyMerged'), cmd('edit.paste'), '-');
+    items.push(cmd('edit.undo'), cmd('edit.redo'), '-', cmd('edit.cut'), cmd('edit.copy'), cmd('edit.copyMerged'), cmd('edit.paste'), cmd('edit.pasteInPlace'), cmd('edit.pasteInto'), '-');
     if (hasSel) {
       items.push(cmd('select.none', { label: t('ctx.deselect') }), cmd('select.inverse', { label: t('ctx.inverse') }), cmd('select.reselect'), sub(t('menu.select.modify'), [cmd('select.feather'), cmd('select.expand'), cmd('select.contract')]), cmd('select.refine'), '-', cmd('layer.viaCopy'), cmd('layer.viaCut'), cmd('edit.fill'), cmd('edit.stroke'), cmd('edit.contentAware'), cmd('select.toMask'), cmd('edit.clear'));
     } else {

@@ -201,19 +201,18 @@ function define(C) {
   add('file.send', () => ui.sendDialog(), { enabled: hasDoc });
   add('file.share', () => ui.liveDialog(), { enabled: hasDoc });
   add('file.join', () => ui.joinDialog());
+  add('file.newFromClipboard', () => ui.newFromClipboard());
   add('file.sticker', () => ui.stickerDialog(), { enabled: hasDoc });
 
   // ---------- Edit ----------
   add('edit.undo', (app) => app.edoc.undo(), { key: 'Mod+Z', enabled: (app) => app.edoc?.history.canUndo });
   add('edit.redo', (app) => app.edoc.redo(), { key: 'Mod+Shift+Z | Mod+Y', enabled: (app) => app.edoc?.history.canRedo });
-  add('edit.cut', async () => {
-    await C.run('edit.copy');
-    await C.run('edit.clear');
-  }, { key: 'Mod+X', enabled: (app) => hasSel(app) && isRaster(app) });
+  add('edit.cut', () => ui.cut(), { key: 'Mod+X', enabled: (app) => hasLayer(app) && editable(app) });
   add('edit.copy', () => ui.copy(false), { key: 'Mod+C', enabled: hasLayer });
   add('edit.copyMerged', () => ui.copy(true), { key: 'Mod+Shift+C', enabled: hasDoc });
-  add('edit.paste', () => ui.paste(false), { key: 'Mod+V' });
-  add('edit.pasteInPlace', () => ui.paste(true), { key: 'Mod+Shift+V' });
+  add('edit.paste', () => ui.paste('normal'), { key: 'Mod+V' });
+  add('edit.pasteInPlace', () => ui.paste('inPlace'), { key: 'Mod+Shift+V', enabled: hasDoc });
+  add('edit.pasteInto', () => ui.paste('into'), { key: 'Mod+Alt+V', enabled: hasSel });
   add('edit.clear', (app) => {
     const l = active(app);
     const sel = selectionCanvasLayerPixels(app, l);
@@ -621,8 +620,8 @@ function mergeAll(app, visibleOnly) {
  * or [label key, [items]] for a submenu.
  */
 export const MENUS = [
-  ['menu.file', ['file.new', 'file.open', ['menu.file.recent', 'recent'], 'file.place', '-', 'file.close', 'file.closeAll', 'file.save', 'file.saveAs', 'file.revert', '-', 'file.export', 'file.quickExport', 'file.sticker', '-', 'file.send', 'file.share', 'file.join']],
-  ['menu.edit', ['edit.undo', 'edit.redo', ['menu.edit.history', 'history'], '-', 'edit.cut', 'edit.copy', 'edit.copyMerged', 'edit.paste', 'edit.pasteInPlace', 'edit.clear', '-', 'edit.fill', 'edit.stroke', 'edit.contentAware', '-', 'edit.freeTransform', ['menu.edit.transform', ['edit.rotate90', 'edit.rotate-90', 'edit.rotate180', 'edit.flipH', 'edit.flipV']], '-', 'edit.definePattern', '-', 'edit.shortcuts', 'edit.settings']],
+  ['menu.file', ['file.new', 'file.newFromClipboard', 'file.open', ['menu.file.recent', 'recent'], 'file.place', '-', 'file.close', 'file.closeAll', 'file.save', 'file.saveAs', 'file.revert', '-', 'file.export', 'file.quickExport', 'file.sticker', '-', 'file.send', 'file.share', 'file.join']],
+  ['menu.edit', ['edit.undo', 'edit.redo', ['menu.edit.history', 'history'], '-', 'edit.cut', 'edit.copy', 'edit.copyMerged', 'edit.paste', 'edit.pasteInPlace', 'edit.pasteInto', 'edit.clear', '-', 'edit.fill', 'edit.stroke', 'edit.contentAware', '-', 'edit.freeTransform', ['menu.edit.transform', ['edit.rotate90', 'edit.rotate-90', 'edit.rotate180', 'edit.flipH', 'edit.flipV']], '-', 'edit.definePattern', '-', 'edit.shortcuts', 'edit.settings']],
   ['menu.image', [['menu.image.mode', ['image.mode.rgb', 'image.mode.gray', 'image.mode.cmyk']], '-', ['menu.image.adjustments', ADJUSTMENT_IDS.map((id) => `adjust.${id}`)], 'image.autoTone', '-', 'image.imageSize', 'image.canvasSize', ['menu.image.rotate', ['image.rotateCW', 'image.rotateCCW', 'image.rotate180', 'image.flipH', 'image.flipV']], 'image.cropToSelection', 'image.trim', '-', 'image.duplicate']],
   ['menu.layer', ['layer.new', 'layer.newGroup', 'layer.ungroup', 'layer.duplicate', 'layer.viaCopy', 'layer.viaCut', 'layer.delete', 'layer.rename', '-', ['menu.layer.adjustment', ADJUSTMENT_IDS.map((id) => `layer.newAdjustment:${id}`)], ['menu.layer.fill', ['layer.newFill:solid', 'layer.newFill:gradient', 'layer.newFill:pattern']], 'layer.style', '-', ['menu.layer.mask', ['layer.addMask:auto', 'layer.addMask:hide', 'layer.editMask', 'layer.toggleMask', 'layer.invertMask', 'layer.applyMask', 'layer.deleteMask']], 'layer.clip', '-', ['menu.layer.arrange', ['layer.front', 'layer.forward', 'layer.backward', 'layer.back']], 'layer.rasterize', 'layer.mergeDown', 'layer.mergeVisible', 'layer.flatten', '-', 'layer.removeBackground', 'layer.hide', 'layer.lock']],
   ['menu.select', ['select.all', 'select.none', 'select.reselect', 'select.inverse', '-', 'select.subject', 'select.colorRange', 'select.refine', '-', ['menu.select.modify', ['select.feather', 'select.expand', 'select.contract']], '-', 'select.fromLayer', 'select.fromPath', 'select.toMask']],

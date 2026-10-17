@@ -21,6 +21,7 @@
 <!-- modulepreload:start -->
 <link rel="modulepreload" href="js/activity.js">
 <link rel="modulepreload" href="js/app.js">
+<link rel="modulepreload" href="js/clipboard.js">
 <link rel="modulepreload" href="js/commands.js">
 <link rel="modulepreload" href="js/context-menu.js">
 <link rel="modulepreload" href="js/dialogs-html.js">
@@ -50,6 +51,7 @@
 <link rel="modulepreload" href="js/ui.js">
 <link rel="modulepreload" href="js/version.js">
 <link rel="modulepreload" href="js/view/viewport.js">
+<link rel="modulepreload" href="lib/assetwire.js">
 <link rel="modulepreload" href="lib/blend.js">
 <link rel="modulepreload" href="lib/brush.js">
 <link rel="modulepreload" href="lib/bytes.js">
@@ -335,6 +337,7 @@
         <span class="st hide-sm" v-show="S.status.rgb">{ S.status.rgb }</span>
         <span class="st hide-sm" v-show="S.status.cmyk && S.doc.mode === 'cmyk'">{ S.status.cmyk }</span>
         <span class="st hint hide-sm" v-show="S.workspace === 'pro' && !S.status.message" data-field="tool-hint">{ $t('hint.tool.' + S.tool) }</span>
+        <span class="st transfer" v-show="S.live.transfer" role="status" data-field="live-transfer"><progress max="100" :value="S.live.transfer ? S.live.transfer.pct : 0"></progress>{ S.live.transfer ? (S.live.transfer.dir === 'send' ? $t('clip.sending', { name: $t('clip.layerName'), pct: S.live.transfer.pct }) : $t('clip.receiving', { pct: S.live.transfer.pct })) : '' }</span>
         <span class="st msg" role="status">{ S.status.message }</span>
         <span class="st-spacer"></span>
         <span class="st hide-sm" v-show="S.view.proof || S.doc.mode !== 'rgb'"><svg class="ic" aria-hidden="true"><use href="icons.svg#i-proof"/></svg>{ $t('status.proof') }</span>

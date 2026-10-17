@@ -9,7 +9,7 @@ const MAX = 500;
 const PAINT = new Set(['brush', 'pencil']);
 
 /** The plain facts of one recorded step: kind, the layer it touched, a text or a label. */
-export function summarize(edoc, { label = '', icon = '', ops = [], inverse = [] }) {
+export function summarize(edoc, { label = '', icon = '', ops = [], inverse = [], kind = null }) {
   const layerOfOp = (op) => (op.t === 'patch' ? edoc.layerOf(op.id) : op.t === 'add' ? op.layer?.id : op.id ?? null);
   const nameOf = (id) => edoc.layer(id)?.name ?? inverse.find((o) => o.t === 'add' && o.layer?.id === id)?.layer.name ?? '';
   const added = ops.find((o) => o.t === 'add' && o.layer);
@@ -19,7 +19,10 @@ export function summarize(edoc, { label = '', icon = '', ops = [], inverse = [] 
   let k = 'did';
   let layer = first;
   let txt = '';
-  if (textSet) {
+  if (kind === 'paste' || kind === 'pasteText') {
+    k = kind;
+    layer = added?.layer.id ?? first;
+  } else if (textSet) {
     k = 'text';
     layer = textSet.id;
     txt = textSet.props.text.replace(/\s+/g, ' ').slice(0, 60);

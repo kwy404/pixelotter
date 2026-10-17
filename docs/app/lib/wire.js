@@ -12,6 +12,8 @@
 import { concatBytes, fromUtf8, utf8 } from './bytes.js';
 
 export const FRAME_BYTES = 60 * 1024;
+// messages of at least this many frames report their progress (about half a megabyte)
+const PROGRESS_FRAMES = 8;
 const HEAD = 13;
 const MAX_MESSAGE = 512 * 1024 * 1024;
 
@@ -121,8 +123,9 @@ export async function encodeFrames(id, message, opts = {}) {
 
 /** Puts frames back together. push(frame) resolves to the message once complete, else null. */
 export class Assembler {
-  constructor() {
+  constructor({ onProgress = null } = {}) {
     this.pending = new Map();
+    this.onProgress = onProgress;
   }
   async push(frame) {
     const f = frame instanceof Uint8Array ? frame : new Uint8Array(frame);
@@ -140,6 +143,7 @@ export class Assembler {
     if (!entry.parts[index]) {
       entry.parts[index] = f.slice(HEAD);
       entry.got++;
+      if (count >= PROGRESS_FRAMES) this.onProgress?.({ dir: 'receive', id, done: entry.got, total: count });
     }
     if (entry.got < count) return null;
     this.pending.delete(id);
@@ -152,20 +156,22 @@ export class Assembler {
  * in order; a large one waits for the send buffer to drain between frames.
  */
 export class MessagePort {
-  constructor(link, { highWater = 1024 * 1024 } = {}) {
+  constructor(link, { highWater = 1024 * 1024, onProgress = null } = {}) {
     this.link = link;
     this.highWater = highWater;
     this.nextId = 1;
     this.queue = Promise.resolve();
-    this.assembler = new Assembler();
+    this.onProgress = onProgress;
+    this.assembler = new Assembler({ onProgress });
   }
   send(message) {
     const id = this.nextId++;
     this.queue = this.queue.then(async () => {
       const frames = await encodeFrames(id, message);
-      for (const f of frames) {
+      for (let i = 0; i < frames.length; i++) {
         if (this.link.bufferedAmount() > this.highWater) await this.link.drained();
-        this.link.send(f);
+        this.link.send(frames[i]);
+        if (frames.length >= PROGRESS_FRAMES) this.onProgress?.({ dir: 'send', id, done: i + 1, total: frames.length });
       }
     });
     return this.queue;

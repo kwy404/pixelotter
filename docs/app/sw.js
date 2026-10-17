@@ -3,7 +3,7 @@
 // The precache block below is rewritten by scripts/build-app.mjs.
 
 // precache:start
-const CACHE_VERSION = '636970826423';
+const CACHE_VERSION = '89b76eceeeef';
 const PRECACHE = [
   './',
   'app.css',
@@ -18,6 +18,7 @@ const PRECACHE = [
   'index.html',
   'js/activity.js',
   'js/app.js',
+  'js/clipboard.js',
   'js/commands.js',
   'js/context-menu.js',
   'js/denoise-worklet.js',
@@ -50,6 +51,7 @@ const PRECACHE = [
   'js/ui.js',
   'js/version.js',
   'js/view/viewport.js',
+  'lib/assetwire.js',
   'lib/blend.js',
   'lib/brush.js',
   'lib/bytes.js',

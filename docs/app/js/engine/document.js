@@ -94,7 +94,7 @@ export class EditorDocument extends Emitter {
    * Applies and records one user action. Returns false when a live session refuses it (the
    * reason is emitted as 'refused').
    */
-  commit(label, ops, { merge = null, icon = null } = {}) {
+  commit(label, ops, { merge = null, icon = null, kind = null } = {}) {
     if (!ops?.length) return false;
     const ok = this.allowed(ops);
     if (!ok.ok) {
@@ -104,7 +104,7 @@ export class EditorDocument extends Emitter {
     const inverse = this.apply(ops, 'local');
     this.history.push({ label, ops, inverse, merge, icon });
     this.share(ops, inverse);
-    this.emit('recorded', { label, icon, ops, inverse });
+    this.emit('recorded', { label, icon, ops, inverse, kind });
     return true;
   }
 

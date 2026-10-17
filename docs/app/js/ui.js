@@ -500,98 +500,7 @@ export function installShell(ctx) {
       }
     }
   };
-  // drag and drop: on the canvas places a layer, elsewhere opens a document
-  let dragDepth = 0;
-  window.addEventListener('dragenter', (e) => {
-    if (![...(e.dataTransfer?.types ?? [])].includes('Files')) return;
-    dragDepth++;
-    S.dragging = true;
-  });
-  window.addEventListener('dragleave', () => {
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (!dragDepth) S.dragging = false;
-  });
-  window.addEventListener('dragover', (e) => {
-    if ([...(e.dataTransfer?.types ?? [])].includes('Files')) e.preventDefault();
-  });
-  window.addEventListener('drop', async (e) => {
-    const files = [...(e.dataTransfer?.files ?? [])];
-    dragDepth = 0;
-    S.dragging = false;
-    if (!files.length) return;
-    e.preventDefault();
-    const onCanvas = e.target.closest?.('.vp-stage') && app.edoc && !files.some((f) => /\.pxo$/i.test(f.name));
-    if (onCanvas) {
-      const r = app.vp.stage.getBoundingClientRect();
-      await ctx.placeFiles(files, app.vp.toDoc(e.clientX - r.left, e.clientY - r.top));
-    } else await ctx.openFiles(files);
-  });
-
-  // ---------- clipboard ----------
-  ui.copy = async (merged) => {
-    const edoc = app.edoc;
-    const d = edoc.doc;
-    let canvas = merged ? app.renderer.render({ scale: 1 }) : null;
-    if (!merged) {
-      const l = edoc.activeLayer;
-      const { makeCanvas } = await import('./engine/assets.js');
-      canvas = makeCanvas(d.width, d.height);
-      app.renderer.drawContent(canvas.getContext('2d'), l, 1);
-    }
-    const b = edoc.selection.bounds() ?? { x: 0, y: 0, w: d.width, h: d.height };
-    const out = document.createElement('canvas');
-    out.width = b.w;
-    out.height = b.h;
-    const g = out.getContext('2d');
-    g.drawImage(canvas, -b.x, -b.y);
-    if (!edoc.selection.empty) {
-      const sc = edoc.selection.toCanvas((w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }));
-      g.globalCompositeOperation = 'destination-in';
-      g.drawImage(sc, -b.x, -b.y);
-    }
-    const blob = await new Promise((r) => out.toBlob(r, 'image/png'));
-    ctx.clipboard = { blob, x: b.x, y: b.y };
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    } catch {
-      // the system clipboard is optional: the copy is kept inside the app
-    }
-    ctx.toast(t('toast.copied'));
-  };
-  /** Ctrl+V places the picture at the center; Ctrl+Shift+V where it was copied from. */
-  ui.paste = async (inPlace = false) => {
-    let blob = null;
-    try {
-      const items = await navigator.clipboard.read();
-      for (const it of items) {
-        const type = it.types.find((x) => x.startsWith('image/'));
-        if (type) {
-          blob = await it.getType(type);
-          break;
-        }
-      }
-    } catch {
-      blob = ctx.clipboard?.blob ?? null;
-    }
-    blob ??= ctx.clipboard?.blob ?? null;
-    if (!blob) return ctx.toast(t('toast.nothingToPaste'), 'warning');
-    const file = new File([blob], 'pasted.png', { type: blob.type });
-    if (!app.edoc) return ctx.openFiles([file]);
-    const at = inPlace && ctx.clipboard?.blob === blob ? { x: ctx.clipboard.x, y: ctx.clipboard.y } : null;
-    await ctx.placeFiles([file]);
-    if (at) {
-      const l = app.edoc.activeLayer;
-      app.edoc.apply([{ t: 'set', id: l.id, props: { x: at.x + l.w / 2, y: at.y + l.h / 2, scaleX: 1, scaleY: 1 } }]);
-    }
-  };
-  window.addEventListener('paste', (e) => {
-    if (e.target.closest?.('input, textarea')) return;
-    const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-    if (!files.length) return;
-    e.preventDefault();
-    if (app.edoc) ctx.placeFiles(files);
-    else ctx.openFiles(files);
-  });
+  // drag and drop, copy and paste live in clipboard.js
 
   // ---------- keyboard ----------
   window.addEventListener('keydown', (e) => {
@@ -609,6 +518,12 @@ export function installShell(ctx) {
       return;
     }
     const id = app.commands.match(e);
+    // Ctrl+V lets the browser fire its paste event, which carries the data without asking
+    const PASTE = { 'edit.paste': 'normal', 'edit.pasteInPlace': 'inPlace', 'edit.pasteInto': 'into' };
+    if (id && PASTE[id]) {
+      if (app.commands.can(id)) ui.expectPaste(PASTE[id]);
+      return;
+    }
     if (id) {
       e.preventDefault();
       app.run(id);

@@ -1,7 +1,8 @@
 // End to end test of the editor in two headless browser contexts: open the app, load the
 // sample, adjust it, add text, remove the background, use the menus, export a PNG, save and
 // reopen a .pxo project, check the tool cursors, the brush edge, the tour (at 1440 and 375
-// wide), editable text and the tooltips, and send the export to a second context with a SHA-256 match.
+// wide), editable text, the tooltips, keyboard shortcuts and the clipboard, and send the
+// export to a second context with a SHA-256 match.
 // Usage: node test/app-e2e.mjs   (set BROWSER_PATH to use another Chromium based browser)
 import { readFileSync } from 'node:fs';
 import { check, closeAll, failed, launch, openApp, openSample, serve, sha256, step } from './e2e-helpers.mjs';
@@ -530,6 +531,109 @@ try {
       return k;
     });
     check(menuKey === 'Ctrl+J', `the menu shows the shortcut (${menuKey})`);
+  });
+
+  await step('clipboard: paste, copy and drop', async () => {
+    await a.evaluate(() => {
+      const app = window.pixelotter.app;
+      app.run('select.none');
+      app.setTool('move');
+    });
+    const layers2 = () => a.evaluate(() => window.pixelotter.app.edoc.doc.layers.map((l) => ({ id: l.id, type: l.type, name: l.name, w: l.w, h: l.h, x: l.x, y: l.y, text: l.text })));
+    // a synthetic paste event, as the browser fires for Ctrl+V; target: body, or a selector
+    const paste = (what, on = null) =>
+      a.evaluate(async ([what, on]) => {
+        const dt = new DataTransfer();
+        if (what.png) {
+          const c = document.createElement('canvas');
+          c.width = what.png[0];
+          c.height = what.png[1];
+          const g = c.getContext('2d');
+          g.fillStyle = '#2a7';
+          g.fillRect(0, 0, c.width, c.height);
+          const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+          dt.items.add(new File([blob], 'image.png', { type: 'image/png' }));
+        } else dt.setData('text/plain', what.text);
+        const el = on ? document.querySelector(on) : document.body;
+        el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        await new Promise((r) => setTimeout(r, 700));
+      }, [what, on]);
+    let before = await layers2();
+    await paste({ png: [123, 45] });
+    let now = await layers2();
+    const added = now.find((l) => !before.some((b) => b.id === l.id));
+    check(added?.type === 'raster' && added.w === 123 && added.h === 45, `pasting PNG bytes makes a ${added?.w} x ${added?.h} layer`);
+    before = now;
+    await paste({ text: 'Olá mundo' });
+    now = await layers2();
+    const text = now.find((l) => !before.some((b) => b.id === l.id));
+    check(text?.type === 'text' && text.text === 'Olá mundo', 'pasting text makes a text layer');
+    await paste({ text: '#ff8800' });
+    check((await a.evaluate(() => window.pixelotter.S.colors.fg)) === '#ff8800', 'pasting a hex color sets the foreground');
+    await a.evaluate(() => window.pixelotter.app.setColor('fg', '#000000'));
+    // inside a text field the browser pastes as text, the canvas gets nothing
+    before = await layers2();
+    await a.focus('[data-control="opacity"]');
+    await paste({ text: 'Another text' }, '[data-control="opacity"]');
+    check((await layers2()).length === before.length, 'a paste inside a text field stays in the field');
+    // copy a selection, paste it back: same pixels, same place
+    const copied = await a.evaluate(async () => {
+      const { app, ctx } = window.pixelotter;
+      // a plain layer with known pixels (the photo has adjustments and a look on top)
+      await app.run('layer.new');
+      const bg = app.edoc.activeLayer;
+      const fill = new Uint8ClampedArray(bg.w * bg.h * 4);
+      for (let i = 0; i < bg.w * bg.h; i++) fill.set([(i * 13) % 256, (i >> 4) % 256, (i * 7) % 256, 255], i * 4);
+      app.edoc.commit('fill', [{ t: 'patch', id: bg.asset, x: 0, y: 0, w: bg.w, h: bg.h, data: fill }]);
+      app.edoc.commit('sel', [{ t: 'sel', data: app.edoc.selection.rect(100, 120, 50, 40) }]);
+      await ctx.ui.copy(false);
+      app.run('select.none');
+      const px = app.edoc.assets.read(bg.asset, { x: 100, y: 120, w: 50, h: 40 });
+      let sum = 0;
+      for (let i = 0; i < px.length; i++) sum = (sum * 31 + px[i]) % 1000000007;
+      return sum;
+    });
+    before = await layers2();
+    await a.evaluate(async () => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([window.pixelotter.ctx.clipboard.blob], 'image.png', { type: 'image/png' }));
+      document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 700));
+    });
+    now = await layers2();
+    const back = now.find((l) => !before.some((b) => b.id === l.id));
+    const same = await a.evaluate((id) => {
+      const { app } = window.pixelotter;
+      const l = app.edoc.layer(id);
+      const px = app.edoc.assets.read(l.asset);
+      let sum = 0;
+      for (let i = 0; i < px.length; i++) sum = (sum * 31 + px[i]) % 1000000007;
+      return sum;
+    }, back?.id);
+    check(back && back.x === 125 && back.y === 140 && back.w === 50 && same === copied, `copy then paste keeps the pixels and the place (${back?.x}, ${back?.y})`);
+    check(await a.evaluate(() => window.pixelotter.app.edoc.activity.some((e) => e.k === 'paste')), 'the Activity panel logs the paste');
+    // drop an image file on the canvas
+    before = await layers2();
+    await a.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 64;
+      c.height = 32;
+      c.getContext('2d').fillRect(0, 0, 64, 32);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'dropped.png', { type: 'image/png' }));
+      const stage = document.querySelector('.vp-stage');
+      const r = stage.getBoundingClientRect();
+      const at = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, dataTransfer: dt, bubbles: true, cancelable: true };
+      stage.dispatchEvent(new DragEvent('dragenter', at));
+      stage.dispatchEvent(new DragEvent('dragover', at));
+      stage.dispatchEvent(new DragEvent('drop', at));
+      await new Promise((r) => setTimeout(r, 700));
+    });
+    now = await layers2();
+    const dropped = now.find((l) => !before.some((b) => b.id === l.id));
+    check(dropped?.name === 'dropped' && dropped.w === 64, 'dropping an image file on the canvas makes a layer');
+    check(await a.evaluate(() => !!window.pixelotter.app.commands.can('edit.pasteInto') === !window.pixelotter.app.edoc.selection.empty), 'Paste into selection is enabled only with a selection');
   });
 
   const exportAs = async (format, cmyk = false) => {

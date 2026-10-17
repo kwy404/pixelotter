@@ -707,3 +707,5 @@ body[data-workspace='quick'] .optbar { display: none; }
 .activity-list button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .activity-list time { color: var(--muted-foreground); font: 11px/1.35 var(--mono); }
 .hist-author { width: 8px; height: 8px; margin-left: auto; border-radius: 50%; flex: none; }
+.status .transfer { display: inline-flex; align-items: center; gap: 6px; }
+.status .transfer progress { width: 80px; height: 6px; accent-color: var(--primary); }
