@@ -498,16 +498,29 @@ try {
     const after = await names();
     check(after.length === n0 && !after.includes(dup), `Delete removes the active layer (${dup})`);
     // nothing fires while typing in a field
-    await a.click('[data-control="opacity"]');
+    const steps = () => a.evaluate(() => window.pixelotter.app.edoc.history.index);
+    const before = await steps();
+    const field = a.locator('[data-control="opacity"]');
+    const value = await field.inputValue();
+    await field.click();
     await a.keyboard.press('Delete');
     await a.keyboard.press('Control+j');
     await a.keyboard.press('b');
     check((await names()).length === n0 && (await a.evaluate(() => window.pixelotter.app.toolId)) === 'move', 'shortcuts do not fire inside a text field');
+    // put the field back as it was, so leaving it does not record an opacity change (where the
+    // click puts the caret differs between systems, and Delete may have removed a digit)
+    await field.evaluate((el, v) => {
+      el.value = v;
+      el.blur();
+    }, value);
+    check((await steps()) === before, 'typing in the field recorded nothing');
     await a.focus('#viewport');
     await a.keyboard.press('Control+z');
-    check((await names()).includes(dup), 'Ctrl+Z brings the layer back');
+    const back = await a.waitForFunction((d) => window.pixelotter.app.edoc.doc.layers.some((l) => l.name === d), dup, { timeout: 5000 }).then(() => true, () => false);
+    check(back, 'Ctrl+Z brings the layer back');
     await a.keyboard.press('Control+y');
-    check(!(await names()).includes(dup), 'Ctrl+Y redoes');
+    const gone = await a.waitForFunction((d) => !window.pixelotter.app.edoc.doc.layers.some((l) => l.name === d), dup, { timeout: 5000 }).then(() => true, () => false);
+    check(gone, 'Ctrl+Y redoes');
     const menuKey = await a.evaluate(async () => {
       window.pixelotter.S.menuOpen = null;
       document.querySelector('[data-menu="layer"]').click();
