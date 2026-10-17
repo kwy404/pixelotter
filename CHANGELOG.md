@@ -4,6 +4,8 @@ All notable changes to pixelotter are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-17
+
 ### Added
 
 - A tool cursor over the canvas: the brush outline at its real size and zoom, with a crosshair for small brushes and a precise crosshair with Caps Lock, for mouse, pen and touch.

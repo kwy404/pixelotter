@@ -1,6 +1,6 @@
 {
   "name": "pixelotter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "A photo editor that runs entirely in your browser, offline, with layers, cutouts and live editing with friends.",
   "keywords": [

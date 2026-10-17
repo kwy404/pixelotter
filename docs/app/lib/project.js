@@ -34,7 +34,7 @@ export const isProject = (bytes) => bytes?.length >= 8 && PXO_MAGIC.every((b, i)
  * Packs a document and its assets.
  * assets: [{ id, w, h, mime, bytes }], thumbnail: { mime, bytes } or null.
  */
-export function packProject({ doc, assets = [], thumbnail = null, app = '0.1.0', saved = Date.now() }) {
+export function packProject({ doc, assets = [], thumbnail = null, app = '0.2.0', saved = Date.now() }) {
   const needed = new Set(assetIds(doc));
   const list = assets.filter((a) => needed.has(a.id));
   for (const id of needed) if (!list.some((a) => a.id === id)) throw new ProjectError('missing', `Asset ${id} is missing`);
