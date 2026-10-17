@@ -3,7 +3,7 @@
 // The precache block below is rewritten by scripts/build-app.mjs.
 
 // precache:start
-const CACHE_VERSION = '07a225656672';
+const CACHE_VERSION = 'ecfc1b3ad2a1';
 const PRECACHE = [
   './',
   'app.css',
