@@ -170,6 +170,11 @@ try {
     }
     await b.mouse.up();
     check(seen === 'painting', `the activity shows while she paints (${seen})`);
+    // the list follows presence messages: wait for it rather than read it once
+    await a.waitForFunction(() => {
+      const p = window.pixelotter.S.live.peers.find((x) => x.name === 'Bia');
+      return p?.toolName === 'Brush' && !!p.layerName;
+    }, null, { timeout: 10000 }).catch(() => {});
     const people = await a.evaluate(() => window.pixelotter.S.live.peers.find((p) => p.name === 'Bia'));
     check(people.toolName === 'Brush' && !!people.layerName, `the people list shows her tool and layer (${people.toolName}, ${people.layerName})`);
     const dots = await a.evaluate(() => document.querySelectorAll('.layer-row .peer-mini').length);

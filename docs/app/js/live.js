@@ -797,7 +797,17 @@ export class Live extends Emitter {
 
   sendCursor(force) {
     const now = performance.now();
-    if (!this.session || !this.lastPos || (!force && now - this.cursorAt < CURSOR_MS)) return;
+    if (!this.session || !this.lastPos) return;
+    if (!force && now - this.cursorAt < CURSOR_MS) {
+      // throttled: the last position still goes out once the pause is over
+      this.trailing ??= setTimeout(() => {
+        this.trailing = null;
+        this.sendCursor(true);
+      }, CURSOR_MS - (now - this.cursorAt));
+      return;
+    }
+    clearTimeout(this.trailing);
+    this.trailing = null;
     this.cursorAt = now;
     const v = this.app.vp.view;
     const a = this.activity();
@@ -843,6 +853,8 @@ export class Live extends Emitter {
     else vp.peers.set(c.from, { ...info, x: c.x, y: c.y });
     vp.needsOverlay = true;
     if (prev?.layer !== pr.layer) app.syncLayers();
+    // the people list changes with the tool, the layer or the activity at once, not on the next beat
+    if (!prev || prev.tool !== pr.tool || prev.layer !== pr.layer || prev.act !== pr.act || prev.arg !== pr.arg) this.refreshPeople();
     if (this.follow === c.from && c.view) {
       Object.assign(app.edoc.view, { cx: c.view.cx, cy: c.view.cy, zoom: c.view.zoom, fit: false });
       vp.viewChanged();
@@ -1000,6 +1012,8 @@ export class Live extends Emitter {
     this.myId = null;
     this.follow = null;
     clearInterval(this.presenceTimer);
+    clearTimeout(this.trailing);
+    this.trailing = null;
     this.presence.clear();
     this.lastPos = null;
     this.sentKey = '';
